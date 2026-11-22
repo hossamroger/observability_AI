@@ -11,7 +11,7 @@ Unified observability dashboard for Google Analytics 4, Dynatrace, and ELK, with
 - Design: modular connectors, descriptive structured logs, configurable SLOs and alert rules
 
 ## Status
-Repository initialized. The starter source archive prepared in ChatGPT has **not yet been imported** into this repository. No deployment or integration tests have been run. Do not treat this README as a completed application.
+Starter source files are present in this repository. No deployment or integration tests have been run. Do not treat this README as a completed application.
 
 ## Security
 Never commit API tokens, credentials, or production secrets. Use environment-specific secret management.

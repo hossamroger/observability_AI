@@ -48,9 +48,15 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(credentials.getAccessToken().getTokenValue());
             headers.setContentType(MediaType.APPLICATION_JSON);
-            String request = "{"dimensions":[{"name":"platform"},{"name":"streamId"}],"
-                    + ""metrics":[{"name":"activeUsers"},{"name":"eventCount"}],"
-                    + ""limit":1000}";
+            com.fasterxml.jackson.databind.node.ObjectNode payload = json.createObjectNode();
+            payload.set("dimensions", json.createArrayNode()
+                    .add(json.createObjectNode().put("name", "platform"))
+                    .add(json.createObjectNode().put("name", "streamId")));
+            payload.set("metrics", json.createArrayNode()
+                    .add(json.createObjectNode().put("name", "activeUsers"))
+                    .add(json.createObjectNode().put("name", "eventCount")));
+            payload.put("limit", 1000);
+            String request = json.writeValueAsString(payload);
             String endpoint = "https://analyticsdata.googleapis.com/v1beta/properties/"
                     + propertyId + ":runRealtimeReport";
             String body = http.exchange(endpoint, HttpMethod.POST,
