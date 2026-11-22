@@ -1,0 +1,33 @@
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-icon">DS</div><div><strong>Digital Sharjah</strong><small>Reliability Center</small></div></div>
+    <h2>Monitoring</h2>
+    <button *ngFor="let platform of platforms" type="button"
+            [class.active]="selectedPlatform === platform" (click)="selectPlatform(platform)">
+      {{platform === 'BACKEND' ? 'Backend / Infrastructure' : platform}}
+    </button>
+    <div class="sidebar-note">GA4 · Dynatrace · ELK<br>Oracle 19c</div>
+  </aside>
+  <main>
+    <header>
+      <div><div class="eyebrow">OBSERVABILITY / {{selectedPlatform}}</div><h1>{{selectedPlatform}} Monitoring</h1>
+      <p>Activity, availability and service health in one place</p></div>
+      <div class="status">Auto-updates every 30 sec<br><small>Last received: {{lastUpdated}}</small></div>
+    </header>
+    <div class="notice demo" *ngIf="overview?.dataMode === 'DEMO'">DEMO DATA — all values are illustrative, not real monitoring results.</div>
+    <div class="notice error" *ngIf="errorMessage">{{errorMessage}}</div>
+    <div class="notice" *ngIf="loading">Loading dashboard data…</div>
+    <section class="cards">
+      <article class="metric-card" *ngFor="let metric of selectedMetrics">
+        <div class="source">{{metric.sourceSystem}} · {{metric.serviceName}}</div>
+        <div class="metric-value">{{metric.metricValue | number:'1.0-2'}} <span>{{metric.metricUnit}}</span></div>
+        <div class="metric-name">{{metric.metricName.replaceAll('_', ' ')}}</div>
+        <div class="metric-time">Observed window ended {{metric.windowEndUtc | date:'mediumTime'}}</div>
+      </article>
+      <article class="empty-card" *ngIf="!selectedMetrics.length && !loading">
+        No metrics collected for {{selectedPlatform}} yet. Check connector settings and source permissions.
+      </article>
+    </section>
+    <div class="bottom"><strong>Data integrity:</strong> each item includes its source, observation window, and last collection timestamp. Real-time refresh does not guarantee that a source delivered fresh data.</div>
+  </main>
+</div>

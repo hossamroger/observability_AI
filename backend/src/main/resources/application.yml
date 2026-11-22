@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: ds-observability
+  main:
+    banner-mode: off
+  profiles:
+    default: local
+  sql:
+    init:
+      mode: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+monitoring:
+  collection:
+    interval-ms: 30000
+  collector:
+    enabled: false
+  demo:
+    enabled: false
+  ga4:
+    enabled: false
+    property-id: ${GA4_PROPERTY_ID:}
+  dynatrace:
+    enabled: false
+    url: ${DYNATRACE_URL:}
+    api-token: ${DYNATRACE_TOKEN:}
+    metric-selector: ${DYNATRACE_METRIC_SELECTOR:}
+  elk:
+    enabled: false
+    url: ${ELASTICSEARCH_URL:}
+    api-key: ${ELASTICSEARCH_API_KEY:}
+    index-pattern: ${ELASTICSEARCH_INDEX_PATTERN:logs-*}
+    level-field: ${ELASTICSEARCH_LEVEL_FIELD:log.level}
+    error-value: ${ELASTICSEARCH_ERROR_VALUE:ERROR}
