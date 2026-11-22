@@ -1,6 +1,6 @@
 spring:
   application:
-    name: ds-observability
+    name: observability-platform
   main:
     banner-mode: off
   profiles:
