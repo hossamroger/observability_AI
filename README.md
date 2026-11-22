@@ -1,4 +1,4 @@
-# Digital Sharjah Observability Platform
+# Unified Observability Platform
 
 Unified observability dashboard for Google Analytics 4, Dynatrace, and ELK, with Oracle 19c storage and Slack alerts.
 
