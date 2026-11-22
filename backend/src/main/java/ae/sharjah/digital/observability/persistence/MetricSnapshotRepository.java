@@ -13,12 +13,12 @@ public class MetricSnapshotRepository {
     public MetricSnapshotRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
     public void save(MetricObservation observation) {
-        String sql = "MERGE INTO OBS_METRIC_SNAPSHOT target USING (SELECT ? METRIC_ID FROM DUAL) incoming ON (target.METRIC_ID = incoming.METRIC_ID) " +\n                "WHEN MATCHED THEN UPDATE SET target.METRIC_VALUE = ?, target.COLLECTED_AT_UTC = ? " +\n                "WHEN NOT MATCHED THEN INSERT " +\n                "(METRIC_ID, SOURCE_SYSTEM, PLATFORM, SERVICE_NAME, METRIC_NAME, METRIC_VALUE, METRIC_UNIT, WINDOW_START_UTC, WINDOW_END_UTC, COLLECTED_AT_UTC, IS_DEMO) " +\n                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"; */\n        /* String sql = "INSERT INTO OBS_METRIC_SNAPSHOT "
+        String sql = "INSERT INTO OBS_METRIC_SNAPSHOT "
                 + "(METRIC_ID, SOURCE_SYSTEM, PLATFORM, SERVICE_NAME, METRIC_NAME, METRIC_VALUE, "
                 + "METRIC_UNIT, WINDOW_START_UTC, WINDOW_END_UTC, COLLECTED_AT_UTC, IS_DEMO) "
                 + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try {
-            jdbc.update(sql, observation.id, observation.metricValue, Timestamp.from(observation.collectedAtUtc),\n                    observation.id, observation.sourceSystem, observation.platform,
+            jdbc.update(sql, observation.id, observation.sourceSystem, observation.platform,
                     observation.serviceName, observation.metricName, observation.metricValue,
                     observation.metricUnit, Timestamp.from(observation.windowStartUtc),
                     Timestamp.from(observation.windowEndUtc), Timestamp.from(observation.collectedAtUtc),
