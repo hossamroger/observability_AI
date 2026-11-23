@@ -11,3 +11,7 @@
 **/src/main/resources/*.json
 **/ga4-credentials*.json
 **/secrets/
+
+# External local/deployment credentials (never tracked)
+**/credentials.yml
+**/credentials.yaml
