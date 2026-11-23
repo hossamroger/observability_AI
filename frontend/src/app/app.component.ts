@@ -38,7 +38,7 @@ export class AppComponent implements OnInit, OnDestroy {
       if (metric.sourceSystem !== 'DYNATRACE' || metric.platform !== 'BACKEND') continue;
       const key = this.metricKey(metric.metricName);
       if (!key) continue;
-      const match = metric.serviceName.match(/\\[(SERVICE-[^\\]]+)\\]$/);
+      const match = metric.serviceName.match(/\[(SERVICE-[^\]]+)\]$/);
       const id = match?.[1] ?? metric.serviceName;
       const name = match ? metric.serviceName.slice(0, match.index).trim() : metric.serviceName;
       const row = rows.get(id) ?? {id, name, metrics: {}};
