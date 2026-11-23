@@ -31,7 +31,7 @@ public class DashboardController {
 
     @GetMapping("/overview")
     public Map<String, Object> overview() {
-        List<MetricObservation> metrics = snapshots.findLatest(100);
+        List<MetricObservation> metrics = snapshots.findLatestPerMetric(demoMode);
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("dataMode", demoMode ? "DEMO" : "LIVE");
         response.put("generatedAtUtc", Instant.now().toString());
