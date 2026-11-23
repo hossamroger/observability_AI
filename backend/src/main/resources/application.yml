@@ -33,7 +33,7 @@ monitoring:
     url: ${DYNATRACE_URL:}
     api-token: ${DYNATRACE_TOKEN:}
     metric-selector: ${DYNATRACE_METRIC_SELECTOR:}
-    additional-metric-selectors: ${DYNATRACE_ADDITIONAL_METRIC_SELECTORS:builtin:service.response.time:percentile(50),builtin:service.response.time:percentile(99),builtin:service.requestCount.total:sum,builtin:service.errors.total.rate:avg}
+    additional-metric-selectors: ${DYNATRACE_ADDITIONAL_METRIC_SELECTORS:builtin:service.response.time:percentile(50),builtin:service.response.time:percentile(99),builtin:service.requestCount.total:value,builtin:service.errors.total.rate:avg}
     entity-cache-seconds: 900
   elk:
     enabled: false
