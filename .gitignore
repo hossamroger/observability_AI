@@ -6,3 +6,8 @@
 *.log
 .idea/
 .vscode/
+
+# Never commit Google service account credentials
+**/src/main/resources/*.json
+**/ga4-credentials*.json
+**/secrets/
