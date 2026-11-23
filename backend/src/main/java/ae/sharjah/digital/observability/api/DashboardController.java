@@ -40,6 +40,16 @@ public class DashboardController {
         return dynatrace.collectWindow(minutes);
     }
 
+    @GetMapping("/service-history")
+    public List<MetricObservation> serviceHistory(
+            @org.springframework.web.bind.annotation.RequestParam String serviceId,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="60") int minutes) {
+        if (!serviceId.matches("SERVICE-[A-Fa-f0-9]{16}") || (minutes != 60 && minutes != 360 && minutes != 1440))
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST);
+        Instant end = Instant.now();
+        return snapshots.findServiceHistory(serviceId, end.minusSeconds(minutes * 60L), end, demoMode);
+    }
+
     @GetMapping("/overview")
     public Map<String, Object> overview() {
         List<MetricObservation> metrics = snapshots.findLatestPerMetric(demoMode);
