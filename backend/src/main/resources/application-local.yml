@@ -2,7 +2,10 @@ server:
   port: 8080
 spring:
   config:
-    import: "optional:file:${OBS_CREDENTIALS_FILE:./config/credentials.yml}"
+    import:
+      - "optional:file:./config/credentials.yml"
+      - "optional:file:./backend/config/credentials.yml"
+      - "optional:file:${OBS_CREDENTIALS_FILE:./backend/config/credentials.yml}"
   datasource:
     url: jdbc:h2:mem:observability;MODE=Oracle;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
@@ -16,7 +19,7 @@ monitoring:
   collector:
     enabled: true
   demo:
-    enabled: true
+    enabled: false
 
   elk:
     ssl-verification-enabled: false
