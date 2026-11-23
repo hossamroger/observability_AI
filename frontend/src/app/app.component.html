@@ -18,19 +18,28 @@
     <div class="notice error" *ngIf="errorMessage">{{errorMessage}}</div>
     <div class="notice" *ngIf="loading">Loading dashboard data…</div>
     <section *ngIf="selectedPlatform === 'BACKEND'" class="service-panel">
-      <div class="service-summary"><div><small>Services in selected window</small><strong>{{serviceRows.length}}</strong></div><div><small>Services reporting errors</small><strong>{{servicesWithErrors}}</strong></div></div>
+      <div class="service-summary"><div><small>Services in selected window</small><strong>{{serviceRows.length}}</strong></div><div><small>Services reporting errors</small><strong>{{servicesWithErrors}}</strong></div><div><small>Critical services</small><strong>{{criticalServices}}</strong></div></div>
       <div class="service-toolbar"><h2>Service performance</h2><input #searchBox type="search" placeholder="Search services or IDs" [value]="search" (input)="setSearch(searchBox.value)"></div>
       <div class="service-pagination"><button *ngFor="let minutes of windows" [disabled]="windowMinutes === minutes" (click)="selectWindow(minutes)">Last {{minutes}} min</button></div>
       <p class="service-note" *ngIf="windowStart && windowEnd">Reporting window: {{windowStart | date:'medium'}} – {{windowEnd | date:'medium'}}. Dynatrace aggregates over the entire window. Missing values are shown as —.</p>
       <p *ngIf="windowLoading">Refreshing service window…</p><p *ngIf="windowError">{{windowError}}</p>
+      <details><summary>Health thresholds</summary>
+        <label>Warning failure % <input #warn type="number" [value]="warningRate" (change)="setThreshold('warningRate',warn.value)"></label>
+        <label>Critical failure % <input #crit type="number" [value]="criticalRate" (change)="setThreshold('criticalRate',crit.value)"></label>
+        <label>Minimum requests <input #min type="number" [value]="minimumRequests" (change)="setThreshold('minimumRequests',min.value)"></label>
+        <label>Slow P95 (ms) <input #slow type="number" [value]="slowP95" (change)="setThreshold('slowP95',slow.value)"></label>
+      </details>
+      <label>Health <select #healthSelect (change)="healthFilter = healthSelect.value; page = 0"><option *ngFor="let status of ['ALL','CRITICAL','WARNING','HEALTHY','LOW TRAFFIC','UNKNOWN']">{{status}}</option></select></label>
+      <p class="service-note">Impact ranking uses failed service calls, not unique affected users. Unknown indicates missing or inconsistent metrics.</p>
       <div class="table-scroll"><table class="service-table">
-        <thead><tr><th><button (click)="setSort('name')">Service</button></th><th *ngFor="let col of columns"><button (click)="setSort(col.key)">{{col.label}} {{sortBy === col.key ? (descending ? '↓' : '↑') : ''}}</button></th></tr></thead>
-        <tbody><tr *ngFor="let row of visibleRows; trackBy: trackService"><td [title]="row.id">{{row.name}}</td>
+        <thead><tr><th><button (click)="setSort('name')">Service</button></th><th>Health</th><th *ngFor="let col of columns"><button (click)="setSort(col.key)">{{col.label}} {{sortBy === col.key ? (descending ? '↓' : '↑') : ''}}</button></th></tr></thead>
+        <tbody><tr *ngFor="let row of visibleRows; trackBy: trackService"><td [title]="row.id"><button (click)="selectedServiceId = row.id">{{row.name}}</button></td><td [class.error-value]="health(row) === 'CRITICAL'">{{health(row)}}</td>
           <td *ngFor="let col of columns"><ng-container *ngIf="row.metrics[col.key] as metric; else missing"><span [class.error-value]="col.key === 'failure' && metric.metricValue > 0" [title]="'Window ended: ' + metric.windowEndUtc">{{metric.metricValue | number:'1.0-2'}}</span></ng-container><ng-template #missing>—</ng-template></td>
         </tr></tbody>
       </table></div>
       <p *ngIf="!visibleRows.length">No matching service data.</p>
       <div class="service-pagination"><button [disabled]="currentPage === 0" (click)="page = currentPage - 1">Previous</button><span>Page {{currentPage + 1}} / {{pageCount}} · {{filteredRows.length}} services</span><button [disabled]="currentPage + 1 >= pageCount" (click)="page = currentPage + 1">Next</button></div>
+      <section *ngIf="selectedService as service"><h3>{{service.name}}</h3><p>{{service.id}} · {{health(service)}}</p><p *ngFor="let col of columns">{{col.label}}: {{service.metrics[col.key]?.metricValue ?? '—'}}</p><button (click)="selectedServiceId = ''">Close details</button></section>
     </section>
     <section class="cards">
       <article class="metric-card" *ngFor="let metric of (selectedPlatform === 'BACKEND' ? backendOtherMetrics : selectedMetrics)">

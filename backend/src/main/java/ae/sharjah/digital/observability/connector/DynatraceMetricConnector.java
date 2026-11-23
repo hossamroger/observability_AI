@@ -32,6 +32,8 @@ public class DynatraceMetricConnector implements MonitoringConnector {
     private static final Logger LOG = LoggerFactory.getLogger(DynatraceMetricConnector.class);
     private final Set<String> metricSelectors = new LinkedHashSet<>();
     private final long entityCacheSeconds;
+    @Value("${monitoring.dynatrace.management-zone-id:}")
+    private String managementZoneId;
     private final DynatraceServiceNameResolver names = new DynatraceServiceNameResolver();
 
     public DynatraceMetricConnector(RestTemplate http, ObjectMapper json,
@@ -117,7 +119,10 @@ public class DynatraceMetricConnector implements MonitoringConnector {
         names.refresh(http, baseUrl, headers, entityCacheSeconds);
         List<MetricObservation> result = new ArrayList<>();
         int successes = 0;
-        for (String selector : metricSelectors) {
+        Set<String> reportingSelectors = new LinkedHashSet<>(metricSelectors);
+        reportingSelectors.add("builtin:service.errors.total.count:value");
+        reportingSelectors.add("builtin:service.errors.total.successCount:value");
+        for (String selector : reportingSelectors) {
             try {
                 result.addAll(collectSelector(selector, headers, start, end));
                 successes++;
@@ -130,7 +135,7 @@ public class DynatraceMetricConnector implements MonitoringConnector {
         }
         if (successes == 0) throw new IllegalStateException("All reporting window queries failed");
         LOG.info("event=dynatrace_window_collection minutes={} start={} end={} successful={} total={} count={}",
-                minutes, start, end, successes, metricSelectors.size(), result.size());
+                minutes, start, end, successes, reportingSelectors.size(), result.size());
         List<MetricObservation> immutable = java.util.Collections.unmodifiableList(result);
         windowCache.put(minutes, immutable);
         cacheEnds.put(minutes, end);
@@ -142,12 +147,15 @@ public class DynatraceMetricConnector implements MonitoringConnector {
     }
 
     private List<MetricObservation> collectSelector(String selector, HttpHeaders headers, Instant start, Instant end) throws Exception {
-            String uri = UriComponentsBuilder.fromHttpUrl(baseUrl + "/api/v2/metrics/query")
+            UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(baseUrl + "/api/v2/metrics/query")
                     .queryParam("metricSelector", selector)
                     .queryParam("from", start == null ? "now-5m" : start.toEpochMilli())
                     .queryParam("to", end == null ? "now" : end.toEpochMilli())
-                    .queryParam("resolution", start == null ? "1m" : "Inf")
-                    .build().encode().toUriString();
+                    .queryParam("resolution", start == null ? "1m" : "Inf");
+            if (start != null && managementZoneId != null && !managementZoneId.trim().isEmpty()) {
+                builder.queryParam("mzSelector", "mzId(" + managementZoneId.trim() + ")");
+            }
+            String uri = builder.build().encode().toUriString();
             String body = http.exchange(java.net.URI.create(uri), HttpMethod.GET,
                     new HttpEntity<Void>(headers), String.class).getBody();
             JsonNode root = json.readTree(body);
@@ -169,6 +177,8 @@ public class DynatraceMetricConnector implements MonitoringConnector {
                             value /= 1000.0;
                             unit = "ms";
                         } else if (metricKey.startsWith("builtin:service.requestCount")) {
+                            unit = "requests";
+                        } else if (metricKey.startsWith("builtin:service.errors.total.count") || metricKey.startsWith("builtin:service.errors.total.successCount")) {
                             unit = "requests";
                         } else if (metricKey.startsWith("builtin:service.errors.total.rate")) {
                             unit = "percent";
