@@ -17,8 +17,21 @@
     <div class="notice demo" *ngIf="overview?.dataMode === 'DEMO'">DEMO DATA — all values are illustrative, not real monitoring results.</div>
     <div class="notice error" *ngIf="errorMessage">{{errorMessage}}</div>
     <div class="notice" *ngIf="loading">Loading dashboard data…</div>
+    <section *ngIf="selectedPlatform === 'BACKEND'" class="service-panel">
+      <div class="service-summary"><div><small>Services with recent data</small><strong>{{serviceRows.length}}</strong></div><div><small>Services reporting errors</small><strong>{{servicesWithErrors}}</strong></div></div>
+      <div class="service-toolbar"><h2>Service performance</h2><input #searchBox type="search" placeholder="Search services or IDs" [value]="search" (input)="setSearch(searchBox.value)"></div>
+      <p class="service-note">Latest available one-minute observation per metric. Windows may differ; * indicates data older than five minutes. Missing values are shown as —.</p>
+      <div class="table-scroll"><table class="service-table">
+        <thead><tr><th><button (click)="setSort('name')">Service</button></th><th *ngFor="let col of columns"><button (click)="setSort(col.key)">{{col.label}} {{sortBy === col.key ? (descending ? '↓' : '↑') : ''}}</button></th></tr></thead>
+        <tbody><tr *ngFor="let row of visibleRows; trackBy: trackService"><td [title]="row.id">{{row.name}}</td>
+          <td *ngFor="let col of columns"><ng-container *ngIf="row.metrics[col.key] as metric; else missing"><span [class.error-value]="col.key === 'failure' && metric.metricValue > 0" [title]="'Window ended: ' + metric.windowEndUtc">{{metric.metricValue | number:'1.0-2'}}{{isStale(metric) ? '*' : ''}}</span></ng-container><ng-template #missing>—</ng-template></td>
+        </tr></tbody>
+      </table></div>
+      <p *ngIf="!visibleRows.length">No matching service data.</p>
+      <div class="service-pagination"><button [disabled]="currentPage === 0" (click)="page = currentPage - 1">Previous</button><span>Page {{currentPage + 1}} / {{pageCount}} · {{filteredRows.length}} services</span><button [disabled]="currentPage + 1 >= pageCount" (click)="page = currentPage + 1">Next</button></div>
+    </section>
     <section class="cards">
-      <article class="metric-card" *ngFor="let metric of selectedMetrics">
+      <article class="metric-card" *ngFor="let metric of (selectedPlatform === 'BACKEND' ? backendOtherMetrics : selectedMetrics)">
         <div class="source">{{metric.sourceSystem}} · {{metric.serviceName}}</div>
         <div class="metric-value">{{metric.metricValue | number:'1.0-2'}} <span>{{metric.metricUnit}}</span></div>
         <div class="metric-name">{{metric.metricName.replaceAll('_', ' ')}}</div>
