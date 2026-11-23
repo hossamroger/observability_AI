@@ -3,7 +3,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { DashboardService } from './dashboard.service';
 import { DashboardOverview, MetricObservation, Platform } from './metric.model';
 
-type ServiceMetric = 'requests' | 'p50' | 'p95' | 'p99' | 'failure';
+type ServiceMetric = 'requests' | 'failed' | 'successful' | 'p50' | 'p95' | 'p99' | 'failure';
 interface ServiceRow {
   id: string;
   name: string;
@@ -48,10 +48,10 @@ export class AppComponent implements OnInit, OnDestroy {
   }
   page = 0;
   readonly pageSize = 25;
-  sortBy: ServiceMetric | 'name' = 'name';
-  descending = false;
+  sortBy: ServiceMetric | 'name' = 'failed';
+  descending = true;
   readonly columns: {key: ServiceMetric; label: string}[] = [
-    {key:'requests',label:'Total requests'}, {key:'p50',label:'P50 (ms)'},
+    {key:'requests',label:'Total requests'}, {key:'failed',label:'Failed'}, {key:'successful',label:'Successful'}, {key:'p50',label:'P50 (ms)'},
     {key:'p95',label:'P95 (ms)'}, {key:'p99',label:'P99 (ms)'}, {key:'failure',label:'Failure (%)'}
   ];
 
@@ -74,6 +74,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private metricKey(name: string): ServiceMetric | undefined {
     const key = name.toLowerCase();
+    if (key.includes('service.errors.total.count')) return 'failed';
+    if (key.includes('service.errors.total.successcount')) return 'successful';
     if (key.includes('service.requestcount')) return 'requests';
     if (key.includes('service.errors.total.rate')) return 'failure';
     if (key.includes('service.response.time')) {
@@ -84,10 +86,34 @@ export class AppComponent implements OnInit, OnDestroy {
     return undefined;
   }
 
+  warningRate = 1;
+  criticalRate = 5;
+  minimumRequests = 10;
+  slowP95 = 2000;
+  healthFilter = 'ALL';
+  selectedServiceId = '';
+  get selectedService(): ServiceRow | undefined { return this.serviceRows.find(r => r.id === this.selectedServiceId); }
+  health(row: ServiceRow): string {
+    const total = row.metrics.requests?.metricValue;
+    const failed = row.metrics.failed?.metricValue;
+    const successful = row.metrics.successful?.metricValue;
+    const p95 = row.metrics.p95?.metricValue;
+    if (total == null || total <= 0 || failed == null || successful == null || failed + successful !== total || p95 == null) return 'UNKNOWN';
+    if (total < this.minimumRequests) return 'LOW TRAFFIC';
+    const rate = 100 * failed / total;
+    if (rate >= this.criticalRate) return 'CRITICAL';
+    if (rate >= this.warningRate || p95 >= this.slowP95) return 'WARNING';
+    return 'HEALTHY';
+  }
+  setThreshold(key: 'warningRate' | 'criticalRate' | 'minimumRequests' | 'slowP95', value: string): void {
+    const n = Number(value);
+    if (value.trim() && Number.isFinite(n) && n > 0 && (key !== 'warningRate' || n <= this.criticalRate) && (key !== 'criticalRate' || (n >= this.warningRate && n <= 100))) this[key] = n;
+  }
+  get criticalServices(): number { return this.serviceRows.filter(r => this.health(r) === 'CRITICAL').length; }
   get filteredRows(): ServiceRow[] {
     const query = this.search.trim().toLowerCase();
     const sort = this.sortBy;
-    return this.serviceRows.filter(row => (row.name + ' ' + row.id).toLowerCase().includes(query))
+    return this.serviceRows.filter(row => (row.name + ' ' + row.id).toLowerCase().includes(query) && (this.healthFilter === 'ALL' || this.health(row) === this.healthFilter))
       .sort((a,b) => {
         if (sort === 'name') return (this.descending ? -1 : 1) * a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
         const av = a.metrics[sort]?.metricValue, bv = b.metrics[sort]?.metricValue;
