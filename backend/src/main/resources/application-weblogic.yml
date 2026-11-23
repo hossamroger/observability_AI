@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: "optional:file:${OBS_CREDENTIALS_FILE:./config/credentials.yml}"
   datasource:
     jndi-name: java:comp/env/jdbc/DSObservabilityDS
   sql:
