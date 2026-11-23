@@ -23,6 +23,7 @@ monitoring:
   ga4:
     enabled: false
     property-id: ${GA4_PROPERTY_ID:}
+    credentials-path: ${GA4_CREDENTIALS_PATH:}
   dynatrace:
     enabled: false
     url: ${DYNATRACE_URL:}
