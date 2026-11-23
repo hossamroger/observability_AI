@@ -24,6 +24,10 @@ monitoring:
     enabled: false
     property-id: ${GA4_PROPERTY_ID:}
     credentials-path: ${GA4_CREDENTIALS_PATH:}
+    streams:
+      web: ${GA4_WEB_STREAM_ID:}
+      android: ${GA4_ANDROID_STREAM_ID:}
+      ios: ${GA4_IOS_STREAM_ID:}
   dynatrace:
     enabled: false
     url: ${DYNATRACE_URL:}

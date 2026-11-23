@@ -12,7 +12,8 @@ import java.nio.file.Paths;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -34,15 +35,35 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
     private final ObjectMapper json;
     private final String propertyId;
     private final GoogleCredentials credentials;
+    private final Map<String, String> productionStreams;
 
     public Ga4RealtimeConnector(RestTemplate http, ObjectMapper json,
             @Value("${monitoring.ga4.property-id}") String propertyId,
-            @Value("${monitoring.ga4.credentials-path:}") String credentialsPath) throws IOException {
+            @Value("${monitoring.ga4.credentials-path:}") String credentialsPath,
+            @Value("${monitoring.ga4.streams.web:}") String webStream,
+            @Value("${monitoring.ga4.streams.android:}") String androidStream,
+            @Value("${monitoring.ga4.streams.ios:}") String iosStream) throws IOException {
         this.http = http;
         this.json = json;
         this.propertyId = propertyId;
+        Map<String, String> streams = new LinkedHashMap<>();
+        registerStream(streams, "WEB", webStream);
+        registerStream(streams, "ANDROID", androidStream);
+        registerStream(streams, "IOS", iosStream);
+        this.productionStreams = Collections.unmodifiableMap(streams);
         this.credentials = loadCredentials(credentialsPath)
                 .createScoped(Collections.singleton(SCOPE));
+    }
+
+    private static void registerStream(Map<String, String> streams, String platform, String streamId) {
+        if (streamId == null || !streamId.trim().matches("[0-9]+")) {
+            throw new IllegalArgumentException("GA4 stream ID must be configured for " + platform);
+        }
+        String id = streamId.trim();
+        if (streams.containsValue(id)) {
+            throw new IllegalArgumentException("GA4 stream IDs must be unique");
+        }
+        streams.put(platform, id);
     }
 
     private GoogleCredentials loadCredentials(String credentialsPath) throws IOException {
@@ -70,6 +91,11 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
             payload.set("metrics", json.createArrayNode()
                     .add(json.createObjectNode().put("name", "activeUsers"))
                     .add(json.createObjectNode().put("name", "eventCount")));
+            com.fasterxml.jackson.databind.node.ArrayNode streamIds = json.createArrayNode();
+            productionStreams.values().forEach(streamIds::add);
+            payload.putObject("dimensionFilter").putObject("filter")
+                    .put("fieldName", "streamId").putObject("inListFilter")
+                    .set("values", streamIds);
             payload.put("limit", 1000);
             String request = json.writeValueAsString(payload);
             String endpoint = "https://analyticsdata.googleapis.com/v1beta/properties/"
@@ -84,6 +110,7 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
                 String platform = row.path("dimensionValues").path(0).path("value")
                         .asText("UNKNOWN").toUpperCase(Locale.ROOT);
                 String stream = row.path("dimensionValues").path(1).path("value").asText("UNKNOWN");
+                if (!stream.equals(productionStreams.get(platform))) continue;
                 String service = "STREAM_" + stream;
                 double users = row.path("metricValues").path(0).path("value").asDouble();
                 double events = row.path("metricValues").path(1).path("value").asDouble();
