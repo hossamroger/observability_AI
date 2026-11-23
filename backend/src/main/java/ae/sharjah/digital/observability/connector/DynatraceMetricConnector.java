@@ -7,6 +7,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpEntity;
@@ -24,7 +29,8 @@ public class DynatraceMetricConnector implements MonitoringConnector {
     private final ObjectMapper json;
     private final String baseUrl;
     private final String token;
-    private final String metricSelector;
+    private static final Logger LOG = LoggerFactory.getLogger(DynatraceMetricConnector.class);
+    private final Set<String> metricSelectors = new LinkedHashSet<>();
     private final long entityCacheSeconds;
     private final DynatraceServiceNameResolver names = new DynatraceServiceNameResolver();
 
@@ -38,23 +44,72 @@ public class DynatraceMetricConnector implements MonitoringConnector {
         this.json = json;
         this.baseUrl = baseUrl.replaceAll("/+$", "");
         this.token = token;
-        this.metricSelector = additionalSelectors.trim().isEmpty() ? metricSelector
-                : metricSelector + "," + additionalSelectors;
+        addSelectors(metricSelector);
+        addSelectors(additionalSelectors);
         this.entityCacheSeconds = Math.max(60, entityCacheSeconds);
     }
+    private void addSelectors(String input) {
+        // Split only top-level commas, preserving commas inside selector transformations.
+        int depth = 0;
+        boolean quoted = false;
+        int start = 0;
+        for (int i = 0; i < input.length(); i++) {
+            char ch = input.charAt(i);
+            if (ch == '~' && i + 1 < input.length()) { i++; continue; }
+            if (ch == '"') quoted = !quoted;
+            if (!quoted) {
+                if (ch == '(') depth++;
+                else if (ch == ')') depth--;
+                else if (ch == ',' && depth == 0) {
+                    addSelector(input.substring(start, i));
+                    start = i + 1;
+                }
+            }
+        }
+        addSelector(input.substring(start));
+    }
+
+    private void addSelector(String selector) {
+        if (!selector.trim().isEmpty()) metricSelectors.add(selector.trim());
+    }
+
     @Override public String sourceName() { return "DYNATRACE"; }
 
     @Override public CollectionBatch collect() {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", "Api-Token " + token);
-            names.refresh(http, baseUrl, headers, entityCacheSeconds);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Api-Token " + token);
+        names.refresh(http, baseUrl, headers, entityCacheSeconds);
+        List<MetricObservation> observations = new ArrayList<>();
+        int successful = 0;
+        Exception lastError = null;
+        for (String selector : metricSelectors) {
+            try {
+                List<MetricObservation> batch = collectSelector(selector, headers);
+                observations.addAll(batch);
+                successful++;
+                LOG.info("event=dynatrace_metric_collection_success selector={} count={}", selector, batch.size());
+            } catch (Exception error) {
+                lastError = error;
+                String category = error instanceof HttpStatusCodeException
+                        ? "HTTP_" + ((HttpStatusCodeException) error).getRawStatusCode()
+                        : error.getClass().getSimpleName();
+                LOG.warn("event=dynatrace_metric_collection_failed selector={} category={}", selector, category);
+            }
+        }
+        if (successful == 0) throw new IllegalStateException("All Dynatrace metric queries failed", lastError);
+        if (successful < metricSelectors.size()) {
+            LOG.warn("event=dynatrace_partial_collection successful={} total={}", successful, metricSelectors.size());
+        }
+        return new CollectionBatch(sourceName(), observations);
+    }
+
+    private List<MetricObservation> collectSelector(String selector, HttpHeaders headers) throws Exception {
             String uri = UriComponentsBuilder.fromHttpUrl(baseUrl + "/api/v2/metrics/query")
-                    .queryParam("metricSelector", metricSelector)
+                    .queryParam("metricSelector", selector)
                     .queryParam("from", "now-5m")
                     .queryParam("resolution", "1m")
                     .build().encode().toUriString();
-            String body = http.exchange(uri, HttpMethod.GET,
+            String body = http.exchange(java.net.URI.create(uri), HttpMethod.GET,
                     new HttpEntity<Void>(headers), String.class).getBody();
             JsonNode root = json.readTree(body);
             List<MetricObservation> observations = new ArrayList<>();
@@ -84,10 +139,6 @@ public class DynatraceMetricConnector implements MonitoringConnector {
                     }
                 }
             }
-            return new CollectionBatch(sourceName(), observations);
-        } catch (Exception error) {
-            throw new IllegalStateException("Dynatrace metrics collection failed: "
-                    + error.getClass().getSimpleName(), error);
-        }
+            return observations;
     }
 }
