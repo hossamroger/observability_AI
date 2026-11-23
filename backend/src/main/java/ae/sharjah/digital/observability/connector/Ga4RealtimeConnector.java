@@ -6,6 +6,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.auth.oauth2.GoogleCredentials;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import com.google.auth.oauth2.ServiceAccountCredentials;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,12 +36,22 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
     private final GoogleCredentials credentials;
 
     public Ga4RealtimeConnector(RestTemplate http, ObjectMapper json,
-            @Value("${monitoring.ga4.property-id}") String propertyId) throws IOException {
+            @Value("${monitoring.ga4.property-id}") String propertyId,
+            @Value("${monitoring.ga4.credentials-path:}") String credentialsPath) throws IOException {
         this.http = http;
         this.json = json;
         this.propertyId = propertyId;
-        this.credentials = GoogleCredentials.getApplicationDefault()
+        this.credentials = loadCredentials(credentialsPath)
                 .createScoped(Collections.singleton(SCOPE));
+    }
+
+    private GoogleCredentials loadCredentials(String credentialsPath) throws IOException {
+        if (credentialsPath == null || credentialsPath.trim().isEmpty()) {
+            return GoogleCredentials.getApplicationDefault();
+        }
+        try (InputStream input = Files.newInputStream(Paths.get(credentialsPath.trim()))) {
+            return ServiceAccountCredentials.fromStream(input);
+        }
     }
 
     @Override public String sourceName() { return "GA4"; }
@@ -45,6 +59,7 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
     @Override public CollectionBatch collect() {
         try {
             credentials.refreshIfExpired();
+            if (credentials.getAccessToken() == null) credentials.refresh();
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(credentials.getAccessToken().getTokenValue());
             headers.setContentType(MediaType.APPLICATION_JSON);
