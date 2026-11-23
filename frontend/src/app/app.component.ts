@@ -92,6 +92,46 @@ export class AppComponent implements OnInit, OnDestroy {
   slowP95 = 2000;
   healthFilter = 'ALL';
   selectedServiceId = '';
+  historyMinutes = 60;
+  historyMetric: ServiceMetric = 'p95';
+  history: MetricObservation[] = [];
+  historyLoading = false;
+  historyError = '';
+  private historySubscription?: import('rxjs').Subscription;
+  openService(id: string): void { this.selectedServiceId = id; this.loadHistory(); }
+  closeService(): void { this.historySubscription?.unsubscribe(); this.selectedServiceId = ''; this.history = []; }
+  loadHistory(): void {
+    this.historySubscription?.unsubscribe();
+    this.history = []; this.historyError = ''; this.historyLoading = false;
+    if (!/^SERVICE-[A-Fa-f0-9]{16}$/.test(this.selectedServiceId)) {
+      this.historyError = 'History requires a resolved Dynatrace service ID.'; return;
+    }
+    this.historyLoading = true;
+    this.historySubscription = this.dashboard.loadServiceHistory(this.selectedServiceId, this.historyMinutes).subscribe({
+      next: data => { this.history = data; this.historyLoading = false; },
+      error: () => { this.historyError = 'Historical data unavailable'; this.historyLoading = false; }
+    });
+  }
+  get historyPoints(): {x:number;y:number;value:number;time:string}[] {
+    const data = this.history.filter(m => this.metricKey(m.metricName) === this.historyMetric && Number.isFinite(m.metricValue));
+    const end = Date.now(), start = end - this.historyMinutes * 60000;
+    const max = Math.max(1, ...data.map(m => m.metricValue));
+    return data.map(m => ({x: 30 + 740 * (Date.parse(m.windowEndUtc)-start)/(end-start), y: 190 - 170*m.metricValue/max, value:m.metricValue,time:m.windowEndUtc}));
+  }
+  get historyMaximum(): number { return Math.max(1, ...this.historyPoints.map(p => p.value)); }
+  private restoreThresholds(): void {
+    try {
+      const saved = JSON.parse(localStorage.getItem('observability.health.v1') || 'null');
+      if (saved && [saved.warningRate,saved.criticalRate,saved.minimumRequests,saved.slowP95].every(n => typeof n === 'number' && Number.isFinite(n) && n > 0) && saved.warningRate <= saved.criticalRate && saved.criticalRate <= 100) {
+        this.warningRate = saved.warningRate; this.criticalRate = saved.criticalRate;
+        this.minimumRequests = saved.minimumRequests; this.slowP95 = saved.slowP95;
+      }
+    } catch { /* Storage may be disabled. Defaults remain available. */ }
+  }
+  private persistThresholds(): void {
+    try { localStorage.setItem('observability.health.v1', JSON.stringify({warningRate:this.warningRate,criticalRate:this.criticalRate,minimumRequests:this.minimumRequests,slowP95:this.slowP95})); }
+    catch { /* Current session values remain available. */ }
+  }
   get selectedService(): ServiceRow | undefined { return this.serviceRows.find(r => r.id === this.selectedServiceId); }
   health(row: ServiceRow): string {
     const total = row.metrics.requests?.metricValue;
@@ -107,7 +147,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
   setThreshold(key: 'warningRate' | 'criticalRate' | 'minimumRequests' | 'slowP95', value: string): void {
     const n = Number(value);
-    if (value.trim() && Number.isFinite(n) && n > 0 && (key !== 'warningRate' || n <= this.criticalRate) && (key !== 'criticalRate' || (n >= this.warningRate && n <= 100))) this[key] = n;
+    if (value.trim() && Number.isFinite(n) && n > 0 && (key !== 'warningRate' || n <= this.criticalRate) && (key !== 'criticalRate' || (n >= this.warningRate && n <= 100))) { this[key] = n; this.persistThresholds(); }
   }
   get criticalServices(): number { return this.serviceRows.filter(r => this.health(r) === 'CRITICAL').length; }
   get filteredRows(): ServiceRow[] {
@@ -141,6 +181,7 @@ export class AppComponent implements OnInit, OnDestroy {
   constructor(private readonly dashboard: DashboardService) {}
 
   ngOnInit(): void {
+    this.restoreThresholds();
     this.refresh();
     this.stream = this.dashboard.observeChanges(() => this.refresh());
     // Re-fetch occasionally even if a proxy disconnects or drops server-sent events.
@@ -148,6 +189,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.historySubscription?.unsubscribe();
     this.stream?.close();
     this.windowSubscription?.unsubscribe();
     if (this.fallbackRefresh) clearInterval(this.fallbackRefresh);
