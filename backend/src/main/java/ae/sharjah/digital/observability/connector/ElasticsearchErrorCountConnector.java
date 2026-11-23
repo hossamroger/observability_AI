@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.Collections;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -27,7 +28,7 @@ public class ElasticsearchErrorCountConnector implements MonitoringConnector {
     private final String levelField;
     private final String errorValue;
 
-    public ElasticsearchErrorCountConnector(RestTemplate http, ObjectMapper json,
+    public ElasticsearchErrorCountConnector(@Qualifier("elkRestTemplate") RestTemplate http, ObjectMapper json,
             @Value("${monitoring.elk.url}") String baseUrl,
             @Value("${monitoring.elk.index-pattern}") String indexPattern,
             @Value("${monitoring.elk.api-key}") String apiKey,
