@@ -29,6 +29,17 @@ public class DashboardController {
         this.demoMode = demoMode;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private ae.sharjah.digital.observability.connector.DynatraceMetricConnector dynatrace;
+
+    @GetMapping("/service-window")
+    public List<MetricObservation> serviceWindow(@org.springframework.web.bind.annotation.RequestParam(defaultValue="5") int minutes) {
+        if (minutes != 5 && minutes != 15 && minutes != 30 && minutes != 60)
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST);
+        if (demoMode || dynatrace == null) return java.util.Collections.emptyList();
+        return dynatrace.collectWindow(minutes);
+    }
+
     @GetMapping("/overview")
     public Map<String, Object> overview() {
         List<MetricObservation> metrics = snapshots.findLatestPerMetric(demoMode);

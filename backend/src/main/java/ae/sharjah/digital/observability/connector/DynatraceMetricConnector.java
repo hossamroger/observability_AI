@@ -103,11 +103,50 @@ public class DynatraceMetricConnector implements MonitoringConnector {
         return new CollectionBatch(sourceName(), observations);
     }
 
+    private final java.util.Map<Integer, List<MetricObservation>> windowCache = new java.util.HashMap<>();
+    private final java.util.Map<Integer, Instant> cacheEnds = new java.util.HashMap<>();
+
+    public synchronized List<MetricObservation> collectWindow(int minutes) {
+        if (minutes != 5 && minutes != 15 && minutes != 30 && minutes != 60)
+            throw new IllegalArgumentException("Unsupported reporting window");
+        Instant end = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MINUTES).minusSeconds(60);
+        if (end.equals(cacheEnds.get(minutes))) return windowCache.get(minutes);
+        Instant start = end.minusSeconds(minutes * 60L);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Api-Token " + token);
+        names.refresh(http, baseUrl, headers, entityCacheSeconds);
+        List<MetricObservation> result = new ArrayList<>();
+        int successes = 0;
+        for (String selector : metricSelectors) {
+            try {
+                result.addAll(collectSelector(selector, headers, start, end));
+                successes++;
+            } catch (Exception error) {
+                LOG.warn("event=dynatrace_window_query_failed selector={} minutes={} category={}",
+                        selector, minutes, error instanceof HttpStatusCodeException
+                        ? "HTTP_" + ((HttpStatusCodeException) error).getRawStatusCode()
+                        : error.getClass().getSimpleName());
+            }
+        }
+        if (successes == 0) throw new IllegalStateException("All reporting window queries failed");
+        LOG.info("event=dynatrace_window_collection minutes={} start={} end={} successful={} total={} count={}",
+                minutes, start, end, successes, metricSelectors.size(), result.size());
+        List<MetricObservation> immutable = java.util.Collections.unmodifiableList(result);
+        windowCache.put(minutes, immutable);
+        cacheEnds.put(minutes, end);
+        return immutable;
+    }
+
     private List<MetricObservation> collectSelector(String selector, HttpHeaders headers) throws Exception {
+        return collectSelector(selector, headers, null, null);
+    }
+
+    private List<MetricObservation> collectSelector(String selector, HttpHeaders headers, Instant start, Instant end) throws Exception {
             String uri = UriComponentsBuilder.fromHttpUrl(baseUrl + "/api/v2/metrics/query")
                     .queryParam("metricSelector", selector)
-                    .queryParam("from", "now-5m")
-                    .queryParam("resolution", "1m")
+                    .queryParam("from", start == null ? "now-5m" : start.toEpochMilli())
+                    .queryParam("to", end == null ? "now" : end.toEpochMilli())
+                    .queryParam("resolution", start == null ? "1m" : "Inf")
                     .build().encode().toUriString();
             String body = http.exchange(java.net.URI.create(uri), HttpMethod.GET,
                     new HttpEntity<Void>(headers), String.class).getBody();
@@ -120,6 +159,7 @@ public class DynatraceMetricConnector implements MonitoringConnector {
                             ? data.path("dimensions").get(0).asText() : "ALL";
                     JsonNode timestamps = data.path("timestamps");
                     JsonNode values = data.path("values");
+                    if (start != null && values.size() != 1) throw new IllegalStateException("Expected one aggregate per service");
                     for (int index = 0; index < values.size() && index < timestamps.size(); index++) {
                         if (values.get(index).isNull()) continue;
                         Instant when = Instant.ofEpochMilli(timestamps.get(index).asLong());
@@ -135,7 +175,7 @@ public class DynatraceMetricConnector implements MonitoringConnector {
                         }
                         observations.add(new MetricObservation(sourceName(), "BACKEND",
                                 names.resolve(entity), metricKey, value, unit,
-                                when.minusSeconds(60), when, false));
+                                start == null ? when.minusSeconds(60) : start, end == null ? when : end, false));
                     }
                 }
             }

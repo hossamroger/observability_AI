@@ -18,13 +18,15 @@
     <div class="notice error" *ngIf="errorMessage">{{errorMessage}}</div>
     <div class="notice" *ngIf="loading">Loading dashboard data…</div>
     <section *ngIf="selectedPlatform === 'BACKEND'" class="service-panel">
-      <div class="service-summary"><div><small>Services with recent data</small><strong>{{serviceRows.length}}</strong></div><div><small>Services reporting errors</small><strong>{{servicesWithErrors}}</strong></div></div>
+      <div class="service-summary"><div><small>Services in selected window</small><strong>{{serviceRows.length}}</strong></div><div><small>Services reporting errors</small><strong>{{servicesWithErrors}}</strong></div></div>
       <div class="service-toolbar"><h2>Service performance</h2><input #searchBox type="search" placeholder="Search services or IDs" [value]="search" (input)="setSearch(searchBox.value)"></div>
-      <p class="service-note">Latest available one-minute observation per metric. Windows may differ; * indicates data older than five minutes. Missing values are shown as —.</p>
+      <div class="service-pagination"><button *ngFor="let minutes of windows" [disabled]="windowMinutes === minutes" (click)="selectWindow(minutes)">Last {{minutes}} min</button></div>
+      <p class="service-note" *ngIf="windowStart && windowEnd">Reporting window: {{windowStart | date:'medium'}} – {{windowEnd | date:'medium'}}. Dynatrace aggregates over the entire window. Missing values are shown as —.</p>
+      <p *ngIf="windowLoading">Refreshing service window…</p><p *ngIf="windowError">{{windowError}}</p>
       <div class="table-scroll"><table class="service-table">
         <thead><tr><th><button (click)="setSort('name')">Service</button></th><th *ngFor="let col of columns"><button (click)="setSort(col.key)">{{col.label}} {{sortBy === col.key ? (descending ? '↓' : '↑') : ''}}</button></th></tr></thead>
         <tbody><tr *ngFor="let row of visibleRows; trackBy: trackService"><td [title]="row.id">{{row.name}}</td>
-          <td *ngFor="let col of columns"><ng-container *ngIf="row.metrics[col.key] as metric; else missing"><span [class.error-value]="col.key === 'failure' && metric.metricValue > 0" [title]="'Window ended: ' + metric.windowEndUtc">{{metric.metricValue | number:'1.0-2'}}{{isStale(metric) ? '*' : ''}}</span></ng-container><ng-template #missing>—</ng-template></td>
+          <td *ngFor="let col of columns"><ng-container *ngIf="row.metrics[col.key] as metric; else missing"><span [class.error-value]="col.key === 'failure' && metric.metricValue > 0" [title]="'Window ended: ' + metric.windowEndUtc">{{metric.metricValue | number:'1.0-2'}}</span></ng-container><ng-template #missing>—</ng-template></td>
         </tr></tbody>
       </table></div>
       <p *ngIf="!visibleRows.length">No matching service data.</p>

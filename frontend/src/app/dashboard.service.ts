@@ -12,6 +12,10 @@ export class DashboardService {
     return this.http.get<DashboardOverview>(`${this.apiPath}/overview`);
   }
 
+  loadServiceWindow(minutes: number): Observable<import('./metric.model').MetricObservation[]> {
+    return this.http.get<import('./metric.model').MetricObservation[]>(`${this.apiPath}/service-window`, {params: {minutes}});
+  }
+
   observeChanges(onChange: () => void): EventSource {
     const stream = new EventSource(`${this.apiPath}/stream`);
     stream.addEventListener('metrics-updated', onChange);

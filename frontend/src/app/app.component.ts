@@ -23,18 +23,41 @@ export class AppComponent implements OnInit, OnDestroy {
   overview: DashboardOverview | null = null;
   loading = true;
   search = '';
+  readonly windows = [5, 15, 30, 60];
+  windowMinutes = 5;
+  windowMetrics: MetricObservation[] = [];
+  windowError = '';
+  windowLoading = false;
+  private windowRequest = 0;
+  private windowSubscription?: import('rxjs').Subscription;
+  get windowStart(): string | undefined { return this.windowMetrics[0]?.windowStartUtc; }
+  get windowEnd(): string | undefined { return this.windowMetrics[0]?.windowEndUtc; }
+  selectWindow(minutes: number): void {
+    this.windowMinutes = minutes; this.page = 0; this.windowMetrics = [];
+    this.refreshWindow();
+  }
+  private refreshWindow(): void {
+    if (this.selectedPlatform !== 'BACKEND') return;
+    const request = ++this.windowRequest;
+    this.windowSubscription?.unsubscribe();
+    this.windowLoading = true;
+    this.windowSubscription = this.dashboard.loadServiceWindow(this.windowMinutes).subscribe({
+      next: metrics => { if (request === this.windowRequest) { this.windowMetrics = metrics; this.windowError = ''; this.windowLoading = false; } },
+      error: () => { if (request === this.windowRequest) { this.windowMetrics = []; this.windowError = 'Dynatrace reporting window unavailable'; this.windowLoading = false; } }
+    });
+  }
   page = 0;
   readonly pageSize = 25;
   sortBy: ServiceMetric | 'name' = 'name';
   descending = false;
   readonly columns: {key: ServiceMetric; label: string}[] = [
-    {key:'requests',label:'Requests / min'}, {key:'p50',label:'P50 (ms)'},
+    {key:'requests',label:'Total requests'}, {key:'p50',label:'P50 (ms)'},
     {key:'p95',label:'P95 (ms)'}, {key:'p99',label:'P99 (ms)'}, {key:'failure',label:'Failure (%)'}
   ];
 
   get serviceRows(): ServiceRow[] {
     const rows = new Map<string, ServiceRow>();
-    for (const metric of this.overview?.metrics ?? []) {
+    for (const metric of this.windowMetrics) {
       if (metric.sourceSystem !== 'DYNATRACE' || metric.platform !== 'BACKEND') continue;
       const key = this.metricKey(metric.metricName);
       if (!key) continue;
@@ -100,10 +123,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stream?.close();
+    this.windowSubscription?.unsubscribe();
     if (this.fallbackRefresh) clearInterval(this.fallbackRefresh);
   }
 
-  selectPlatform(platform: Platform): void { this.selectedPlatform = platform; }
+  selectPlatform(platform: Platform): void { this.selectedPlatform = platform; this.refreshWindow(); }
 
   get selectedMetrics(): MetricObservation[] {
     const data = this.overview?.metrics ?? [];
@@ -123,6 +147,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   refresh(): void {
+    this.refreshWindow();
     this.dashboard.loadOverview().subscribe({
       next: data => { this.overview = data; this.errorMessage = ''; this.loading = false; },
       error: () => { this.errorMessage = 'Backend unavailable. Verify the local server and proxy.'; this.loading = false; }
