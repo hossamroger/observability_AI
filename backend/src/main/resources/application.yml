@@ -30,6 +30,7 @@ monitoring:
     metric-selector: ${DYNATRACE_METRIC_SELECTOR:}
   elk:
     enabled: false
+    ssl-verification-enabled: true
     url: ${ELASTICSEARCH_URL:}
     api-key: ${ELASTICSEARCH_API_KEY:}
     index-pattern: ${ELASTICSEARCH_INDEX_PATTERN:logs-*}
