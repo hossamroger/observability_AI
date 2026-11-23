@@ -28,6 +28,23 @@ public class MetricSnapshotRepository {
         }
     }
 
+    public List<MetricObservation> findLatestPerMetric(boolean demo) {
+        String sql = "SELECT * FROM (SELECT s.*, ROW_NUMBER() OVER (PARTITION BY "
+                + "SOURCE_SYSTEM, PLATFORM, SERVICE_NAME, METRIC_NAME ORDER BY WINDOW_END_UTC DESC, "
+                + "COLLECTED_AT_UTC DESC, METRIC_ID DESC) AS OBS_RANK FROM OBS_METRIC_SNAPSHOT s "
+                + "WHERE IS_DEMO = ? AND WINDOW_END_UTC >= ?) WHERE OBS_RANK = 1 "
+                + "ORDER BY SOURCE_SYSTEM, PLATFORM, SERVICE_NAME, METRIC_NAME";
+        return jdbc.query(sql, (result, row) -> new MetricObservation(
+                result.getString("METRIC_ID"), result.getString("SOURCE_SYSTEM"), result.getString("PLATFORM"),
+                result.getString("SERVICE_NAME"), result.getString("METRIC_NAME"),
+                result.getDouble("METRIC_VALUE"), result.getString("METRIC_UNIT"),
+                result.getTimestamp("WINDOW_START_UTC").toInstant(),
+                result.getTimestamp("WINDOW_END_UTC").toInstant(),
+                result.getTimestamp("COLLECTED_AT_UTC").toInstant(),
+                result.getInt("IS_DEMO") == 1), demo ? 1 : 0,
+                Timestamp.from(java.time.Instant.now().minusSeconds(3600)));
+    }
+
     public List<MetricObservation> findLatest(int maximumRows) {
         int limit = Math.min(Math.max(maximumRows, 1), 500);
         // Portable SQL for Oracle 19c and H2: FETCH FIRST is supported by both.
