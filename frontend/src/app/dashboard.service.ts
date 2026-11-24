@@ -24,6 +24,10 @@ export class DashboardService {
     return this.http.post<ApplicationRange>(`${this.apiPath}/application-range`, null, {params});
   }
 
+  loadApplicationSourceHistory(minutes: number): Observable<ApplicationRange> {
+    return this.http.post<ApplicationRange>(`${this.apiPath}/application-source-history`, null, {params: {minutes}});
+  }
+
   loadApplicationHistory(platform: string, metric: string, minutes: number): Observable<MetricObservation[]> {
     return this.http.get<MetricObservation[]>(`${this.apiPath}/application-history`, {params: {platform,metric,minutes}});
   }
