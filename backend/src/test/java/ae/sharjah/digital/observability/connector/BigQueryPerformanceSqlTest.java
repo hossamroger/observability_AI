@@ -11,6 +11,16 @@ class BigQueryPerformanceSqlTest {
         assertEquals("events", BigQueryPerformanceSql.metricUnit("purchase_events"));
     }
 
+    @Test void crossDayQueryUsesOneCombinedCohort() {
+        String sql = BigQueryGa4Connector.sql(java.util.Arrays.asList(
+                "example.analytics.events_20261124", "example.analytics.events_intraday_20261125"));
+        assertTrue(sql.contains("FROM `example.analytics.events_20261124`"));
+        assertTrue(sql.contains("FROM `example.analytics.events_intraday_20261125`"));
+        assertEquals(2, sql.split("event_timestamp >= UNIX_MICROS", -1).length - 1);
+        assertEquals(1, sql.split("session_journeys AS", -1).length - 1);
+        assertTrue(sql.contains("workflow_total_events"));
+    }
+
     @Test void queryRetainsScopeAndAvoidsUnmatchedPaymentDurations() {
         String sql = BigQueryGa4Connector.sql("example.analytics.events_intraday_20260101");
         assertTrue(sql.contains("stream_id=@ios"));
