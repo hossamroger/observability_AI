@@ -100,3 +100,8 @@ h1 span { color:var(--muted); font-weight:400; }
 .service-empty { color:var(--muted); background:var(--muted-surface); padding:14px; text-align:center; border-radius:6px; }
 @media(max-width:760px) { .service-search { flex-basis:100%; justify-content:flex-start; } .service-search input { flex:1; width:auto; } .service-summary { grid-template-columns:repeat(3,minmax(0,1fr)); } .service-summary>div { padding:9px; border-right:1px solid var(--border); border-bottom:0; } .service-summary strong { font-size:22px; } }
 @media(max-width:380px) { .service-summary { grid-template-columns:1fr; }.service-summary>div { border-right:0; border-bottom:1px solid var(--border); } }
+
+.shell { background:var(--canvas); color:var(--ink); }
+.theme-toggle { background:transparent; border:1px solid #526885; border-radius:5px; color:#e1e8f3; padding:5px 9px; font-size:12px; white-space:nowrap; }
+.theme-toggle:hover { background:#31527c; }
+@media(max-width:1100px){.topbar { gap:12px; }.brand{padding-right:12px}.topbar nav button{padding:7px 10px}}
