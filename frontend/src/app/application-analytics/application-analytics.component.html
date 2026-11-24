@@ -46,7 +46,7 @@
     <span *ngIf="bigQueryWindow as w">{{w.windowStartUtc | date:'MMM d, HH:mm'}} – {{w.windowEndUtc | date:'MMM d, HH:mm'}}</span>
   </div>
   <div class="insight-list" *ngIf="assessment.findings.length">
-    <article class="insight-row" *ngFor="let finding of assessment.findings" [attr.data-severity]="finding.severity">
+    <article class="insight-row" *ngFor="let finding of assessment.findings; trackBy: trackFinding" [attr.data-severity]="finding.severity">
       <span class="insight-symbol" aria-hidden="true">{{finding.severity === 'info' ? 'i' : '!'}}</span>
       <div class="insight-content"><div class="insight-title"><strong>{{finding.title}}</strong><span class="insight-level">{{finding.severity}}</span></div>
         <p>{{finding.evidence}}</p><p class="insight-action">{{finding.action}}</p></div>
