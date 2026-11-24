@@ -125,7 +125,7 @@ public class BigQueryGa4Connector implements MonitoringConnector {
                     throw new IllegalStateException("Unexpected BigQuery result");
                 double value = Double.parseDouble(fields.path(2).path("v").asText());
                 if (!Double.isFinite(value) || value < 0) throw new IllegalStateException("Invalid metric");
-                observations.add(new MetricObservation(sourceName(), platform, "GA4_INTRADAY", metric,
+                observations.add(new MetricObservation(sourceName(), platform, "GA4_INTRADAY", metric, value,
                         metric.equals("observed_users") ? "users" : metric.equals("observed_sessions") ? "sessions" : "events",
                         start, end, false));
             }
