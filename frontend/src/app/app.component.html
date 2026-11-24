@@ -1,12 +1,11 @@
 <a class="skip-link" href="#workspace">Skip to monitoring workspace</a>
 <div class="shell">
-  <aside class="sidebar" aria-label="Workspace navigation">
+  <header class="topbar" aria-label="Workspace navigation">
     <div class="brand">
       <svg class="brand-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M4 17h5l4-9 6 16 4-10h5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <div><strong>Observability</strong><small>Reliability workspace</small></div>
+      <strong>Observability</strong>
     </div>
     <nav aria-label="Monitoring platforms">
-      <div class="nav-caption">APPLICATIONS</div>
       <button *ngFor="let platform of platforms" type="button" [class.active]="selectedPlatform === platform" [attr.aria-current]="selectedPlatform === platform ? 'page' : null" (click)="selectPlatform(platform)">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <ng-container [ngSwitch]="platform">
@@ -16,21 +15,17 @@
             <ng-container *ngSwitchDefault><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01m4-11h6m-6 11h6"/></ng-container>
           </ng-container>
         </svg>
-        <span>{{platformTitle(platform)}}</span><span class="nav-selected" *ngIf="selectedPlatform === platform"></span>
+        <span>{{platform === 'BACKEND' ? 'Backend' : platformTitle(platform)}}</span>
       </button>
     </nav>
-    <div class="sidebar-note"><div class="nav-caption">TELEMETRY</div><div>GA4 / BigQuery</div><div>Dynatrace / ELK</div><small>Operational analytics</small></div>
-  </aside>
+    <div class="topbar-meta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg><span>{{displayTimezone}}</span></div>
+  </header>
   <main id="workspace" tabindex="-1">
     <header class="workspace-header">
-      <div>
-        <div class="eyebrow">Monitoring <span>/</span> {{platformTitle(selectedPlatform)}}</div>
-        <h1>{{platformTitle(selectedPlatform)}}</h1>
-        <p>{{selectedPlatform === 'BACKEND' ? 'Service health, latency and infrastructure' : 'Application activity, experience and operational performance'}}</p>
-      </div>
+      <h1><span>Monitoring /</span> {{platformTitle(selectedPlatform)}}</h1>
       <div class="header-actions">
         <div class="status"><span class="status-dot" [class.status-error]="!!errorMessage || !overview"></span><span>{{errorMessage ? 'Refresh failed' : overview ? 'Auto refresh · 30s' : 'Connecting'}}</span><small>{{lastUpdated}}</small></div>
-        <button type="button" class="refresh-button" (click)="refresh()" aria-label="Refresh dashboard"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg><span>Refresh</span></button>
+        <button type="button" class="refresh-button" (click)="refresh()" aria-label="Refresh dashboard" title="Refresh live dashboard"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg><span>Refresh</span></button>
       </div>
     </header>
     <div class="notice demo" *ngIf="overview?.dataMode === 'DEMO'">DEMO DATA — all values are illustrative, not real monitoring results.</div>
