@@ -1,2 +1,32 @@
-:root{font-family:Inter,Arial,sans-serif;color:#102038;background:#f5f7fb}*{box-sizing:border-box}
-body{margin:0}button{font:inherit}
+:root {
+  color-scheme: light;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: 14px;
+  color: #172a40;
+  background: #f6f8fb;
+  --canvas: #f6f8fb;
+  --surface: #ffffff;
+  --muted-surface: #f7f9fb;
+  --ink: #172a40;
+  --muted: #596b80;
+  --border: #dbe2ea;
+  --accent: #163e80;
+  --accent-soft: #eaf2fc;
+  --success: #17664a;
+  --danger: #b42318;
+  --warning: #92600e;
+  --radius: 10px;
+  --space: 16px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 3px;
+}
+button, input, select { min-height: 34px; }
+h1, h2, h3, p { overflow-wrap: anywhere; }
+h1, h2, h3 { color: var(--ink); }
+::selection { background: #cfe3fc; color: #123b70; }

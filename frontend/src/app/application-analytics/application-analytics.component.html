@@ -1,22 +1,4 @@
-<section class="service-panel">
-  <div class="section-heading"><h2>Analytics time range</h2><small>BigQuery · GA4 Realtime stays live</small></div>
-  <div class="range-controls">
-    <label>Reporting period <select #rangeSelect [value]="rangeChoice" (change)="selectRange(rangeSelect.value)">
-      <option value="live">Live rolling 30 minutes</option><option value="5">Last 5 minutes</option><option value="15">Last 15 minutes</option>
-      <option value="30">Last 30 minutes</option><option value="60">Last hour</option><option value="360">Last 6 hours</option>
-      <option value="1440">Last 24 hours</option><option value="10080">Last 7 days</option><option value="custom">Custom range</option>
-    </select></label>
-    <ng-container *ngIf="rangeChoice === 'custom'">
-      <label>From (local time) <input type="datetime-local" #from [value]="customFrom" (input)="customFrom = from.value"></label>
-      <label>To (local time) <input type="datetime-local" #to [value]="customTo" (input)="customTo = to.value"></label>
-    </ng-container>
-    <button type="button" [disabled]="rangeChoice === 'live' || rangeLoading" (click)="applyRange()">{{rangeLoading ? 'Loading report…' : 'Apply'}}</button>
-  </div>
-  <p class="service-note" *ngIf="rangeReport">Displayed report: {{rangeReport.windowStartUtc | date:'medium'}} – {{rangeReport.windowEndUtc | date:'medium'}}. Generated {{rangeReport.generatedAtUtc | date:'medium'}}. It will not refresh automatically.</p>
-  <p class="service-note" *ngIf="!rangeReport">Displaying scheduled live observations until a requested report succeeds.</p>
-  <p class="service-note">Relative reporting ends are aligned to 5-minute boundaries after the configured source delay. Reports are limited by the existing query byte cap; long ranges may be rejected. A 5-minute range has no eligible 5-minute startup cohort under the current definition.</p>
-  <p class="negative" role="alert" *ngIf="rangeError">{{rangeError}} Previous displayed data is unchanged.</p>
-</section>
+<div class="context-bar">
 <section class="analytics-sources" aria-label="Data sources">
   <div *ngFor="let source of [{name:'GA4 Realtime',key:'GA4',window:realtimeWindow},{name:'BigQuery',key:'BIGQUERY',window:bigQueryWindow}]">
     <div class="source-header"><strong>{{source.name}}</strong>
@@ -29,65 +11,52 @@
     <small *ngIf="outcome(source.key) as result">Latest attempt {{result.executedAtUtc | date:'MMM d, HH:mm:ss'}} · {{result.status}}<ng-container *ngIf="result.errorCategory"> · {{result.errorCategory}}</ng-container></small>
   </div>
 </section>
-<p class="source-note">GA4 and BigQuery have independent windows and user definitions. Recent collection does not guarantee complete source data.</p>
+<details class="metric-help source-help"><summary>About source coverage</summary><p>GA4 and BigQuery use different windows and user definitions. Collection freshness does not guarantee complete telemetry.</p></details>
+<section class="report-toolbar" aria-label="Reporting period">
+  <div class="section-heading"><h2>Reporting window</h2><small>GA4 Realtime remains live</small></div>
+  <div class="range-controls">
+    <label>Reporting period <select [ngModel]="rangeChoice" (ngModelChange)="selectRange($event)" [disabled]="rangeLoading">
+      <option value="live">Live rolling 30 minutes</option><option value="5">Last 5 minutes</option><option value="15">Last 15 minutes</option>
+      <option value="30">Last 30 minutes</option><option value="60">Last hour</option><option value="360">Last 6 hours</option>
+      <option value="1440">Last 24 hours</option><option value="10080">Last 7 days</option><option value="custom">Custom range</option>
+    </select></label>
+    <ng-container *ngIf="rangeChoice === 'custom'">
+      <label>From (local time) <input type="datetime-local" #from [value]="customFrom" (input)="customFrom = from.value"></label>
+      <label>To (local time) <input type="datetime-local" #to [value]="customTo" (input)="customTo = to.value"></label>
+    </ng-container>
+    <button type="button" [disabled]="rangeChoice === 'live' || rangeLoading" (click)="applyRange()">{{rangeLoading ? 'Loading report…' : 'Apply'}}</button>
+  </div>
+  <p class="service-note" *ngIf="rangeReport">Displayed report: {{rangeReport.windowStartUtc | date:'medium'}} – {{rangeReport.windowEndUtc | date:'medium'}}. Generated {{rangeReport.generatedAtUtc | date:'medium'}}. It will not refresh automatically.</p>
+  <p class="service-note" *ngIf="!rangeReport">Displaying scheduled live observations until a requested report succeeds.</p>
+  <details class="metric-help"><summary>Reporting rules</summary><p>Relative windows end at a 5-minute boundary after the source delay. Long queries may exceed the byte limit. A 5-minute window has no eligible startup cohort because startup requires a 5-minute follow-up.</p></details>
+  <p class="negative" role="alert" *ngIf="rangeError">{{rangeError}} Previous displayed data is unchanged.</p>
+</section>
+</div>
+<nav class="section-nav" aria-label="Application analytics sections">
+  <button type="button" *ngFor="let section of sections" [class.active]="activeSection === section.key" [attr.aria-pressed]="activeSection === section.key" (click)="selectSection(section.key)">{{section.label}}</button>
+</nav>
+<div class="workspace-section overview-grid" [hidden]="activeSection !== 'overview'">
 <section class="service-panel">
-  <div class="section-heading"><h2>Activity overview</h2><small>Primary metrics</small></div>
+  <div class="section-heading"><h2><svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19v-6m5 6V8m5 11V4m5 15v-9"/></svg>Activity overview</h2><small>GA4 / BigQuery</small></div>
   <div class="kpi-grid">
-    <div class="kpi" *ngFor="let metric of overviewMetrics">
+    <div class="kpi" *ngFor="let metric of primaryOverviewMetrics">
       <span>{{metric.label}}</span><strong>{{(value(metric) | number:'1.0-2') ?? '—'}}</strong>
       <small>{{metric.source === 'GA4' ? 'GA4 Realtime · last 30 min' : 'BigQuery'}}</small>
     </div>
+    <div class="kpi" *ngFor="let stage of overviewCoverage">
+      <span>{{stage.label}}</span><strong>{{(stage.rate | number:'1.0-2') ?? '—'}}<small class="inline-unit" *ngIf="stage.rate !== null">%</small></strong>
+      <small>BigQuery · eligible sessions</small>
+    </div>
+  </div>
+  <div class="secondary-metrics" *ngIf="isMobile">
+    <div *ngFor="let metric of secondaryOverviewMetrics"><span>{{metric.label}}</span><strong>{{(value(metric) | number:'1.0-0') ?? '—'}}</strong></div>
   </div>
 </section>
-    <section class="service-panel" *ngIf="selectedPlatform === 'ANDROID' || selectedPlatform === 'IOS'">
-      <h2>Application journey performance</h2>
-      <div class="table-scroll"><table class="service-table performance-table">
-        <thead><tr><th>Journey</th><th *ngFor="let col of durationColumns">{{col.label}}</th></tr></thead>
-        <tbody><tr *ngFor="let journey of durationRows"><td>{{journey.label}}</td>
-          <td *ngFor="let col of durationColumns"><ng-container *ngIf="performanceMetric(journey.key + '_' + col.key) as m; else noSample">{{displayValue(m) | number:'1.0-2'}}</ng-container><ng-template #noSample>—</ng-template></td>
-        </tr></tbody>
-      </table></div>
-      <p class="service-note">GA4 event timestamp differences, not native cold-start timings. Session journeys use a 5-minute follow-up; approximate percentiles include matched observations only. Missing values are not zero.</p>
-    </section>
-    <section class="service-panel" *ngIf="selectedPlatform === 'ANDROID' || selectedPlatform === 'IOS'">
-      <h2>Session journey coverage</h2>
-      <p class="service-note">Eligible sessions: {{eligibleSessions ?? '—'}}. Each stage is measured against the same eligible cohort, not a count of unique users.</p>
-      <div class="journey-stage" *ngFor="let stage of sessionStages">
-        <div class="journey-label"><strong>{{stage.label}}</strong><span>{{performanceMetric(stage.key + '_samples')?.metricValue ?? '—'}} / {{eligibleSessions ?? '—'}}
-          · {{(percent(performanceMetric(stage.key + '_samples')?.metricValue,eligibleSessions) | number:'1.0-1') ?? '—'}}%</span></div>
-        <div class="journey-track"><div class="journey-fill" [style.width.%]="percent(performanceMetric(stage.key + '_samples')?.metricValue,eligibleSessions) ?? 0"></div></div>
-        <p class="service-note">Not observed within 5 minutes: {{notObserved(performanceMetric(stage.key + '_samples')?.metricValue) ?? '—'}}</p>
-      </div>
-      <h3>Slow matched sessions</h3>
-      <div class="table-scroll"><table class="service-table">
-        <thead><tr><th>Journey</th><th *ngFor="let threshold of slowThresholds">&gt; {{threshold}}s</th></tr></thead>
-        <tbody><tr *ngFor="let stage of sessionStages"><td>{{stage.label}}</td>
-          <td *ngFor="let threshold of slowThresholds">{{performanceMetric(stage.key + '_over_' + threshold + 's')?.metricValue ?? '—'}}</td>
-        </tr></tbody>
-      </table></div>
-      <p class="service-note">Threshold counts overlap and exclude unobserved stages. A missing event is not proof of a failed session.</p>
-    </section>
-    <section class="service-panel" *ngIf="selectedPlatform === 'ANDROID' || selectedPlatform === 'IOS'">
-      <details class="version-details" open><summary>Application version comparison</summary>
-      <p class="service-note">Up to 20 versions per platform, ranked by eligible sessions in the current BigQuery window. Version is taken from the session start event; unknown or ambiguous versions are grouped separately. Times in seconds.</p>
-      <div class="table-scroll"><table class="service-table">
-        <thead><tr><th>App version</th><th>Sessions</th><th>First screen %</th><th>Home %</th><th>First P50</th><th>First P95</th><th>First P99</th><th>Home P50</th><th>Home P95</th><th>Home P99</th></tr></thead>
-        <tbody><tr *ngFor="let row of versionRows"><td>{{row.version}}</td><td>{{row.metrics['session_start_eligible_sessions']}}</td>
-          <td>{{(percent(row.metrics['session_to_first_screen_samples'],row.metrics['session_start_eligible_sessions']) | number:'1.0-1') ?? '—'}}</td>
-          <td>{{(percent(row.metrics['session_to_home_samples'],row.metrics['session_start_eligible_sessions']) | number:'1.0-1') ?? '—'}}</td>
-          <td *ngFor="let key of ['session_to_first_screen_p50_ms','session_to_first_screen_p95_ms','session_to_first_screen_p99_ms','session_to_home_p50_ms','session_to_home_p95_ms','session_to_home_p99_ms']">{{(row.metrics[key] | number:'1.0-2') ?? '—'}}</td>
-        </tr></tbody>
-      </table></div>
-      <p *ngIf="!versionRows.length">No version-level observations in the latest window.</p>
-      <p class="service-note">Compare sample sizes before drawing conclusions; approximate tail percentiles are less reliable for small cohorts.</p>
-      </details>
-    </section>
-
 <section class="service-panel">
-  <div class="section-heading"><h2>{{isMobile ? 'Payment analytics' : 'Workflow analytics'}}</h2><small>BigQuery</small></div>
+  <div class="section-heading"><h2><svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18m-14 5h3"/></svg>{{isMobile ? 'Payment analytics' : 'Workflow analytics'}}</h2><small>BigQuery</small></div>
   <div class="kpi-grid">
     <div class="kpi" *ngFor="let metric of operationMetrics">
-      <span>{{metric.label}}</span><strong [class.positive]="metric.tone === 'positive' && value(metric) != null" [class.negative]="metric.tone === 'negative' && (value(metric) ?? 0) > 0">{{(value(metric) | number:'1.0-2') ?? '—'}}</strong>
+      <span>{{metric.label}}</span><strong [class.positive]="metric.tone === 'positive' && (value(metric) ?? 0) > 0" [class.negative]="metric.tone === 'negative' && (value(metric) ?? 0) > 0">{{(value(metric) | number:'1.0-2') ?? '—'}}</strong>
     </div>
   </div>
   <ng-container *ngIf="selectedPlatform === 'IOS'">
@@ -102,8 +71,58 @@
   <p class="service-note" *ngIf="selectedPlatform === 'WEB' && qualityValue('workflow_total_events') === 0">No application action or initiation events were observed in this window.</p>
   <p class="service-note">Event counts are not unique transactions or success rates.</p>
 </section>
+</div>
+<div class="workspace-section" [hidden]="activeSection !== 'performance'">
+    <section class="service-panel" *ngIf="selectedPlatform === 'ANDROID' || selectedPlatform === 'IOS'">
+      <div class="section-heading"><h2>Startup performance</h2><small>Matched event timings · seconds</small></div>
+      <div class="table-scroll"><table class="service-table performance-table">
+        <thead><tr><th>Journey</th><th *ngFor="let col of durationColumns">{{col.label}}</th></tr></thead>
+        <tbody><tr *ngFor="let journey of durationRows"><td>{{journey.label}}</td>
+          <td *ngFor="let col of durationColumns"><ng-container *ngIf="performanceMetric(journey.key + '_' + col.key) as m; else noSample">{{displayValue(m) | number:'1.0-2'}}</ng-container><ng-template #noSample>—</ng-template></td>
+        </tr></tbody>
+      </table></div>
+      <p class="service-note">Event-based timing, not native cold start. Percentiles include matched observations only; — indicates missing data.</p>
+    </section>
+    <section class="service-panel" *ngIf="selectedPlatform === 'ANDROID' || selectedPlatform === 'IOS'">
+      <div class="section-heading"><h2>Session journey</h2><small>Five-minute observation window</small></div>
+      <p class="service-note">{{eligibleSessions ?? '—'}} eligible sessions · Same cohort across both stages.</p>
+      <div class="journey-stage" *ngFor="let stage of sessionStages">
+        <div class="journey-label"><strong>{{stage.label}}</strong><span>{{performanceMetric(stage.key + '_samples')?.metricValue ?? '—'}} / {{eligibleSessions ?? '—'}}
+          · <ng-container *ngIf="percent(performanceMetric(stage.key + '_samples')?.metricValue,eligibleSessions) !== null; else missingCoverage">{{percent(performanceMetric(stage.key + '_samples')?.metricValue,eligibleSessions) | number:'1.0-1'}}%</ng-container><ng-template #missingCoverage>—</ng-template></span></div>
+        <div class="journey-track"><div class="journey-fill" [style.width.%]="percent(performanceMetric(stage.key + '_samples')?.metricValue,eligibleSessions) ?? 0"></div></div>
+        <p class="service-note">Not observed within 5 minutes: {{notObserved(performanceMetric(stage.key + '_samples')?.metricValue) ?? '—'}}</p>
+      </div>
+      <h3>Slow matched sessions</h3>
+      <div class="table-scroll"><table class="service-table">
+        <thead><tr><th>Journey</th><th *ngFor="let threshold of slowThresholds">&gt; {{threshold}}s</th></tr></thead>
+        <tbody><tr *ngFor="let stage of sessionStages"><td>{{stage.label}}</td>
+          <td *ngFor="let threshold of slowThresholds">{{performanceMetric(stage.key + '_over_' + threshold + 's')?.metricValue ?? '—'}}</td>
+        </tr></tbody>
+      </table></div>
+      <p class="service-note">Thresholds overlap. Unobserved stages are not classified as failures.</p>
+    </section>
+</div>
+<div class="workspace-section" [hidden]="activeSection !== 'versions'">
+    <section class="service-panel" *ngIf="selectedPlatform === 'ANDROID' || selectedPlatform === 'IOS'">
+      <div class="section-heading"><h2>Version comparison</h2><small>Seconds · latest selected window</small></div>
+      <div class="table-toolbar"><label>Search versions <input type="search" placeholder="e.g. 2.20" [(ngModel)]="versionSearch"></label><span>{{filteredVersionRows.length}} of {{versionRows.length}} versions</span></div>
+      <p class="service-note">Up to 20 versions per platform, ranked by eligible sessions in the current BigQuery window. Version is taken from the session start event; unknown or ambiguous versions are grouped separately. Times in seconds.</p>
+      <div class="table-scroll"><table class="service-table">
+        <thead><tr><th><button type="button" (click)="sortVersions('version')">App version{{versionSortIndicator('version')}}</button></th><th><button type="button" (click)="sortVersions('session_start_eligible_sessions')">Sessions{{versionSortIndicator('session_start_eligible_sessions')}}</button></th><th>First screen %</th><th>Home %</th><th>First P50</th><th><button type="button" (click)="sortVersions('session_to_first_screen_p95_ms')">First P95{{versionSortIndicator('session_to_first_screen_p95_ms')}}</button></th><th>First P99</th><th>Home P50</th><th><button type="button" (click)="sortVersions('session_to_home_p95_ms')">Home P95{{versionSortIndicator('session_to_home_p95_ms')}}</button></th><th>Home P99</th></tr></thead>
+        <tbody><tr *ngFor="let row of filteredVersionRows"><td>{{row.version}}</td><td>{{row.metrics['session_start_eligible_sessions']}}</td>
+          <td>{{(percent(row.metrics['session_to_first_screen_samples'],row.metrics['session_start_eligible_sessions']) | number:'1.0-1') ?? '—'}}</td>
+          <td>{{(percent(row.metrics['session_to_home_samples'],row.metrics['session_start_eligible_sessions']) | number:'1.0-1') ?? '—'}}</td>
+          <td *ngFor="let key of ['session_to_first_screen_p50_ms','session_to_first_screen_p95_ms','session_to_first_screen_p99_ms','session_to_home_p50_ms','session_to_home_p95_ms','session_to_home_p99_ms']">{{(row.metrics[key] | number:'1.0-2') ?? '—'}}</td>
+        </tr></tbody>
+      </table></div>
+      <p class="empty-state" *ngIf="!filteredVersionRows.length">{{versionRows.length ? 'No matching versions.' : 'No version observations in this window.'}}</p>
+      <p class="service-note">Compare sample sizes before drawing conclusions; approximate tail percentiles are less reliable for small cohorts.</p>
+    </section>
+
+</div>
+<div class="workspace-section" [hidden]="activeSection !== 'trends' && activeSection !== 'overview'">
 <section class="service-panel">
-  <div class="section-heading"><h2>Historical trends</h2><small>{{historySource === 'bigquery' ? 'BigQuery export history' : 'Stored rolling observations'}}</small></div>
+  <div class="section-heading"><h2><svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 17 6-6 5 3 7-8"/><path d="M3 17h.01M9 11h.01M14 14h.01M21 6h.01" stroke-width="3" stroke-linecap="round"/></svg>{{activeSection === 'overview' && isMobile ? 'Home screen & activity trends' : 'Historical trends'}}</h2><small>{{historySource === 'bigquery' ? 'BigQuery export history' : 'Stored rolling observations'}}</small></div>
   <div class="range-controls">
     <label>Source <select [ngModel]="historySource" (ngModelChange)="changeHistorySource($event)" [disabled]="historyLoading">
       <option value="bigquery">BigQuery history</option><option value="stored">Stored snapshots</option>
@@ -114,10 +133,11 @@
     </select></label>
     <button type="button" [disabled]="historyLoading" (click)="loadHistory()">{{historyLoading ? 'Loading…' : 'Load trend'}}</button>
   </div>
-  <p class="service-note" *ngIf="historySource === 'bigquery'">One on-demand query for all supported metrics and platforms. Each point represents its own time bucket, not a rolling snapshot. Sessions can occur in more than one bucket; do not sum them as unique sessions. Startup percentiles use eligible session starts and matched screen events; the final 5 minutes cannot complete the required follow-up. Missing buckets are not filled with zero.</p>
-  <p class="service-note" *ngIf="historySource === 'stored'">Each point is a separately collected rolling-window snapshot. Counts overlap and must not be summed; percentiles are not averaged. Missing intervals are not interpolated. The new default local database persists across restarts; previous in-memory observations cannot be recovered.</p>
-  <p *ngIf="historyLoading">Loading {{historySource === 'bigquery' ? 'BigQuery' : 'stored'}} history…</p><p class="negative" role="alert" *ngIf="historyError">{{historyError}}</p>
-  <p *ngIf="historyLoaded && !historyLoading && !historyError && !historyRows.length">No observations for the selected metric and period.</p>
+  <details class="metric-help" *ngIf="historySource === 'bigquery'"><summary>How these trends are calculated</summary><p>One on-demand query for all supported metrics and platforms. Each point represents its own time bucket, not a rolling snapshot. Sessions can occur in more than one bucket; do not sum them as unique sessions. Startup percentiles use eligible session starts and matched screen events; the final 5 minutes cannot complete the required follow-up. Missing buckets are not filled with zero.</p></details>
+  <details class="metric-help" *ngIf="historySource === 'stored'"><summary>How stored trends are calculated</summary><p>Each point is a separately collected rolling-window snapshot. Counts overlap and must not be summed; percentiles are not averaged. Missing intervals are not interpolated. The new default local database persists across restarts; previous in-memory observations cannot be recovered.</p></details>
+  <p class="empty-state" role="status" *ngIf="historyLoading">Loading {{historySource === 'bigquery' ? 'BigQuery' : 'stored'}} history…</p><p class="negative" role="alert" *ngIf="historyError">{{historyError}}</p>
+  <p class="empty-state" *ngIf="historyLoaded && !historyLoading && !historyError && !historyRows.length">No observations for the selected metric and period.</p>
+  <p class="empty-state" *ngIf="!historyLoaded && !historyLoading">Choose a metric and reporting period, then load the trend.</p>
   <ng-container *ngIf="historyPoints.length">
     <p class="service-note"><strong>{{historyLabel}}</strong> · {{historyStart | date:'medium'}} – {{historyEnd | date:'medium'}}<ng-container *ngIf="historyReport?.bucketSeconds as bucket"> · {{bucket/60}}-minute buckets</ng-container></p>
     <div class="history-single" *ngIf="historyPoints.length === 1">
@@ -125,18 +145,21 @@
       <span>{{historyPoints[0].time | date:'medium'}}</span>
       <small>Only one observation is available; a trend requires at least two points.</small>
     </div>
-    <svg *ngIf="historyPoints.length > 1" class="trend-chart" viewBox="0 0 780 205" role="img" [attr.aria-label]="historyLabel + ' historical trend'">
-      <line x1="44" y1="175" x2="744" y2="175" stroke="#94a3b8"/><line x1="44" y1="30" x2="44" y2="175" stroke="#94a3b8"/>
-      <text x="44" y="21" font-size="11">{{historyMax | number:'1.0-2'}}</text><text x="28" y="175" font-size="11">0</text>
-      <svg:line *ngFor="let segment of historySegments" [attr.x1]="segment.x1" [attr.y1]="segment.y1" [attr.x2]="segment.x2" [attr.y2]="segment.y2" stroke="#2672e8" stroke-width="1.5"/>
-      <svg:circle *ngFor="let point of historyPoints" [attr.cx]="point.x" [attr.cy]="point.y" r="3" fill="#2672e8"><svg:title>{{point.from | date:'medium'}} – {{point.time | date:'medium'}}: {{point.value | number:'1.0-2'}}</svg:title></svg:circle>
+    <div class="chart-summary"><div><span>Latest observation</span><strong>{{historyLatestValue | number:'1.0-2'}} <small>{{historyUnit}}</small></strong></div><div><span>Data points</span><strong>{{historyPoints.length}}</strong></div><div *ngIf="activeHistoryPoint as point" class="chart-selection"><span>{{point.from | date:'HH:mm'}} – {{point.time | date:'HH:mm'}}</span><strong>{{point.value | number:'1.0-2'}} <small>{{historyUnit}}</small></strong></div></div>
+    <svg *ngIf="historyPoints.length > 1" class="trend-chart" viewBox="0 0 780 205" role="group" [attr.aria-label]="historyLabel + ' historical trend'">
+      <svg:g *ngFor="let grid of historyGrid"><svg:line x1="44" [attr.y1]="grid.y" x2="744" [attr.y2]="grid.y" stroke="#dbe2ea" stroke-dasharray="3 3"/><svg:text x="38" [attr.y]="grid.y+3" font-size="9" text-anchor="end" fill="#596b80">{{grid.value | number:'1.0-1'}}</svg:text></svg:g>
+      <svg:polygon *ngFor="let segment of historySegments" [attr.points]="segment.x1 + ',175 ' + segment.x1 + ',' + segment.y1 + ' ' + segment.x2 + ',' + segment.y2 + ' ' + segment.x2 + ',175'" fill="#0f9b83" fill-opacity=".10"/>
+      <svg:line *ngFor="let segment of historySegments" [attr.x1]="segment.x1" [attr.y1]="segment.y1" [attr.x2]="segment.x2" [attr.y2]="segment.y2" stroke="#087e70" stroke-width="1.8"/>
+      <svg:circle *ngFor="let point of historyPoints" [attr.cx]="point.x" [attr.cy]="point.y" [attr.r]="activeHistoryPoint?.time === point.time ? 5 : 3" fill="#087e70" tabindex="0" [attr.aria-label]="(point.time | date:'medium') + ': ' + point.value + ' ' + historyUnit" (mouseenter)="activeHistoryPoint = point" (mouseleave)="activeHistoryPoint = null" (focus)="activeHistoryPoint = point" (blur)="activeHistoryPoint = null"><svg:title>{{point.from | date:'medium'}} – {{point.time | date:'medium'}}: {{point.value | number:'1.0-2'}}</svg:title></svg:circle>
       <svg:text *ngFor="let tick of historyTicks; let i = index" [attr.x]="44+175*i" y="195" text-anchor="middle" font-size="10">{{tick | date:'HH:mm'}}</svg:text>
     </svg>
-    <p class="service-note">{{historyPoints.length}} observations · Latest {{historyRows[historyRows.length-1].windowEndUtc | date:'medium'}}</p>
+    <details class="metric-help"><summary>View underlying observations</summary><div class="table-scroll trend-table"><table class="service-table"><thead><tr><th>Window start</th><th>Window end</th><th>Value ({{historyUnit}})</th></tr></thead><tbody><tr *ngFor="let row of historyRows"><td>{{row.windowStartUtc | date:'MMM d, HH:mm'}}</td><td>{{row.windowEndUtc | date:'MMM d, HH:mm'}}</td><td>{{displayValue(row) | number:'1.0-2'}}</td></tr></tbody></table></div></details>
   </ng-container>
 </section>
-<details class="service-panel technical">
-  <summary>Data quality &amp; coverage</summary>
+</div>
+<div class="workspace-section" [hidden]="activeSection !== 'diagnostics'">
+<section class="service-panel technical">
+  <div class="section-heading"><h2>Data quality &amp; coverage</h2><small>BigQuery</small></div>
   <p class="service-note">BigQuery checks describe observed telemetry only. Missing identifiers can exclude events from session or payment correlation; they do not establish a failed user journey.</p>
   <div class="table-scroll"><table class="service-table">
     <thead><tr><th>Check</th><th>Observed count</th><th>Share of applicable events</th></tr></thead>
@@ -147,7 +170,7 @@
   </table></div>
   <p class="service-note">GA4 active users are not equivalent to BigQuery distinct pseudonymous identifiers. Windows, processing delay and environment filtering differ. No equality test is applied across sources.</p>
   <p class="service-note">The selected BigQuery report or latest source-wide live window is shown. If a platform has no observations in that window, older platform values are not substituted. A missing value is not zero.</p>
-</details>
+</section>
 <details class="service-panel technical">
   <summary>Technical metrics <small>({{technicalMetrics.length}} additional observations)</small></summary>
   <p class="service-note">Secondary counts are retained for diagnostics. Observed users are pseudonymous identifiers, unlike GA4 active users; session start events are not distinct sessions.</p>
@@ -158,3 +181,4 @@
   <p *ngIf="!technicalMetrics.length">No additional metrics available.</p>
 </details>
 <p class="service-note" *ngIf="!selectedMetrics.length && !loading">No application observations collected yet. Check source configuration and permissions.</p>
+</div>

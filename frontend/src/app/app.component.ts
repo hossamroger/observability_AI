@@ -21,6 +21,10 @@ interface ServiceRow {
 export class AppComponent implements OnInit, OnDestroy {
   readonly platforms: Platform[] = ['WEB', 'ANDROID', 'IOS', 'BACKEND'];
   selectedPlatform: Platform = 'WEB';
+  readonly displayTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local time';
+  platformTitle(platform: Platform): string {
+    return platform === 'BACKEND' ? 'Backend & infrastructure' : platform === 'WEB' ? 'Web' : platform === 'IOS' ? 'iOS' : 'Android';
+  }
   overview: DashboardOverview | null = null;
   loading = true;
   search = '';

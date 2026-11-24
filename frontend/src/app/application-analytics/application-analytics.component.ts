@@ -23,6 +23,48 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
   @Input() selectedPlatform: Platform = 'WEB';
   @Input('selectedMetrics') liveMetrics: MetricObservation[] = [];
   rangeChoice = 'live';
+  activeSection = 'overview';
+  versionSearch = '';
+  versionSort = 'session_start_eligible_sessions';
+  versionDescending = true;
+  activeHistoryPoint: {time:string;from:string;value:number;x:number;y:number} | null = null;
+
+  get sections(): {key:string;label:string}[] {
+    const sections = [{key:'overview',label:'Overview'}];
+    if (this.isMobile) sections.push({key:'performance',label:'Performance'},{key:'versions',label:'App versions'});
+    sections.push({key:'trends',label:'Trends'},{key:'diagnostics',label:'Data quality'});
+    return sections;
+  }
+
+  selectSection(key: string): void { this.activeSection = key; }
+
+  get filteredVersionRows(): {version:string;metrics:Record<string,number>}[] {
+    const search = this.versionSearch.trim().toLowerCase();
+    return this.versionRows.filter(row => row.version.toLowerCase().includes(search)).sort((a,b) => {
+      if (this.versionSort === 'version') return (this.versionDescending ? -1 : 1) * a.version.localeCompare(b.version, undefined, {numeric:true});
+      const av = a.metrics[this.versionSort], bv = b.metrics[this.versionSort];
+      if (av == null || bv == null) return av == null ? (bv == null ? a.version.localeCompare(b.version) : 1) : -1;
+      return (this.versionDescending ? -1 : 1) * (av-bv) || a.version.localeCompare(b.version);
+    });
+  }
+
+  sortVersions(key: string): void {
+    this.versionDescending = this.versionSort === key ? !this.versionDescending : key !== 'version';
+    this.versionSort = key;
+  }
+
+  versionSortIndicator(key: string): string {
+    return key === this.versionSort ? (this.versionDescending ? ' ↓' : ' ↑') : '';
+  }
+
+  get historyUnit(): string { return this.historyDisplayedMetric.endsWith('_ms') ? 's' : this.historyDisplayedMetric === 'observed_sessions' ? 'sessions' : 'events'; }
+  get historyGrid(): {value:number;y:number}[] {
+    return [0,1,2,3,4].map(i => ({value:this.historyMax*i/4,y:175-145*i/4}));
+  }
+  get historyLatestValue(): number | null {
+    const rows = this.historyRows;
+    return rows.length ? this.displayValue(rows[rows.length-1]) : null;
+  }
   customFrom = '';
   customTo = '';
   rangeReport?: ApplicationRange;
@@ -45,8 +87,11 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
   constructor(private readonly dashboard: DashboardService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['selectedPlatform'] && !changes['selectedPlatform'].firstChange) {
-      this.historyMetric = 'observed_sessions';
+    if (changes['selectedPlatform']) {
+      this.historyMetric = this.isMobile ? 'session_to_home_p95_ms' : 'observed_sessions';
+      if (changes['selectedPlatform'].firstChange) return;
+      this.activeSection = 'overview';
+      this.versionSearch = '';
       this.resetHistory();
     }
   }
@@ -108,6 +153,7 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
   }
 
   resetHistory(): void {
+    this.activeHistoryPoint = null;
     this.historySubscription?.unsubscribe();
     this.historyRows = [];
     this.historyReport = undefined;
@@ -119,6 +165,7 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
 
   changeHistoryMetric(metric: string): void {
     this.historyMetric = metric;
+    this.activeHistoryPoint = null;
     if (this.historySource === 'bigquery' && this.historyReport && !this.historyLoading) {
       this.showSourceHistory(this.historyReport);
     } else {
@@ -221,6 +268,22 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
 
   value(definition: MetricDefinition): number | undefined {
     return this.findMetric(definition.source, definition.key)?.metricValue;
+  }
+
+  get primaryOverviewMetrics(): MetricDefinition[] {
+    return this.isMobile ? this.overviewMetrics.slice(0, 2) : this.overviewMetrics;
+  }
+
+  get secondaryOverviewMetrics(): MetricDefinition[] {
+    return this.isMobile ? this.overviewMetrics.slice(2) : [];
+  }
+
+  get overviewCoverage(): {label:string;rate:number|null}[] {
+    if (!this.isMobile) return [];
+    return [
+      {label:'Reached first screen',rate:this.percent(this.performanceMetric('session_to_first_screen_samples')?.metricValue,this.eligibleSessions)},
+      {label:'Reached home',rate:this.percent(this.performanceMetric('session_to_home_samples')?.metricValue,this.eligibleSessions)}
+    ];
   }
 
   get overviewMetrics(): MetricDefinition[] {

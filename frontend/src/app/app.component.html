@@ -1,28 +1,42 @@
+<a class="skip-link" href="#workspace">Skip to monitoring workspace</a>
 <div class="shell">
-  <aside class="sidebar">
-    <div class="brand"><div class="brand-icon">OP</div><div><strong>Observability Platform</strong><small>Reliability Center</small></div></div>
-    <h2>Monitoring</h2>
-    <button *ngFor="let platform of platforms" type="button"
-            [class.active]="selectedPlatform === platform" (click)="selectPlatform(platform)">
-      {{platform === 'BACKEND' ? 'Backend / Infrastructure' : platform}}
-    </button>
-    <div class="sidebar-note">GA4 · BigQuery · Dynatrace · ELK<br>Oracle 19c</div>
-  </aside>
-  <main>
-    <header>
-      <div><div class="eyebrow">OBSERVABILITY / {{selectedPlatform}}</div><h1>{{selectedPlatform}} Monitoring</h1>
-      <p>Activity, availability and service health in one place</p></div>
-      <div class="status">Dashboard refresh every 30 sec<br><small>Last received: {{lastUpdated}}</small></div>
+  <header class="topbar" aria-label="Workspace navigation">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M4 17h5l4-9 6 16 4-10h5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <strong>Observability</strong>
+    </div>
+    <nav aria-label="Monitoring platforms">
+      <button *ngFor="let platform of platforms" type="button" [class.active]="selectedPlatform === platform" [attr.aria-current]="selectedPlatform === platform ? 'page' : null" (click)="selectPlatform(platform)">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <ng-container [ngSwitch]="platform">
+            <ng-container *ngSwitchCase="'WEB'"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4M3 8h18"/></ng-container>
+            <ng-container *ngSwitchCase="'ANDROID'"><rect x="6" y="6" width="12" height="13" rx="2"/><path d="M9 6 7 3m8 3 2-3M3 10v6m18-6v6M9 19v2m6-2v2"/><path d="M9 10h.01m6 0h.01"/></ng-container>
+            <ng-container *ngSwitchCase="'IOS'"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 5h4m-3 14h2"/></ng-container>
+            <ng-container *ngSwitchDefault><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01m4-11h6m-6 11h6"/></ng-container>
+          </ng-container>
+        </svg>
+        <span>{{platform === 'BACKEND' ? 'Backend' : platformTitle(platform)}}</span>
+      </button>
+    </nav>
+    <div class="topbar-meta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg><span>{{displayTimezone}}</span></div>
+  </header>
+  <main id="workspace" tabindex="-1">
+    <header class="workspace-header">
+      <h1><span>Monitoring /</span> {{platformTitle(selectedPlatform)}}</h1>
+      <div class="header-actions">
+        <div class="status"><span class="status-dot" [class.status-error]="!!errorMessage || !overview"></span><span>{{errorMessage ? 'Refresh failed' : overview ? 'Auto refresh · 30s' : 'Connecting'}}</span><small>{{lastUpdated}}</small></div>
+        <button type="button" class="refresh-button" (click)="refresh()" aria-label="Refresh dashboard" title="Refresh live dashboard"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg><span>Refresh</span></button>
+      </div>
     </header>
     <div class="notice demo" *ngIf="overview?.dataMode === 'DEMO'">DEMO DATA — all values are illustrative, not real monitoring results.</div>
     <div class="notice error" *ngIf="errorMessage">{{errorMessage}}</div>
     <div class="notice" *ngIf="loading">Loading dashboard data…</div>
     <section *ngIf="selectedPlatform === 'BACKEND'" class="service-panel">
       <div class="service-summary"><div><small>Services in selected window</small><strong>{{serviceRows.length}}</strong></div><div><small>Services reporting errors</small><strong>{{servicesWithErrors}}</strong></div><div><small>Critical services</small><strong>{{criticalServices}}</strong></div></div>
-      <div class="service-toolbar"><h2>Service performance</h2><input #searchBox type="search" placeholder="Search services or IDs" [value]="search" (input)="setSearch(searchBox.value)"></div>
+      <div class="service-toolbar"><h2>Service performance</h2><input #searchBox type="search" aria-label="Search services" placeholder="Search services or IDs" [value]="search" (input)="setSearch(searchBox.value)"></div>
       <div class="service-pagination"><button *ngFor="let minutes of windows" [disabled]="windowMinutes === minutes" (click)="selectWindow(minutes)">Last {{minutes}} min</button></div>
       <p class="service-note" *ngIf="windowStart && windowEnd">Reporting window: {{windowStart | date:'medium'}} – {{windowEnd | date:'medium'}}. Dynatrace aggregates over the entire window. Missing values are shown as —.</p>
-      <p *ngIf="windowLoading">Refreshing service window…</p><p *ngIf="windowError">{{windowError}}</p>
+      <p class="service-note" role="status" *ngIf="windowLoading">Refreshing service window…</p><p class="notice error" role="alert" *ngIf="windowError">{{windowError}}</p>
       <details class="threshold-panel"><summary>Health thresholds</summary>
         <label>Warning failure % <input #warn type="number" [value]="warningRate" (change)="setThreshold('warningRate',warn.value)"></label>
         <label>Critical failure % <input #crit type="number" [value]="criticalRate" (change)="setThreshold('criticalRate',crit.value)"></label>
@@ -33,7 +47,7 @@
       <p class="service-note">Impact ranking uses failed service calls, not unique affected users. Unknown indicates missing or inconsistent metrics.</p>
       <div class="table-scroll"><table class="service-table">
         <thead><tr><th><button (click)="setSort('name')">Service</button></th><th>Health</th><th *ngFor="let col of columns"><button (click)="setSort(col.key)">{{col.label}} {{sortBy === col.key ? (descending ? '↓' : '↑') : ''}}</button></th></tr></thead>
-        <tbody><tr *ngFor="let row of visibleRows; trackBy: trackService"><td [title]="row.id"><button class="service-link" (click)="openService(row.id)">{{row.name}}</button></td><td [class.error-value]="health(row) === 'CRITICAL'">{{health(row)}}</td>
+        <tbody><tr *ngFor="let row of visibleRows; trackBy: trackService"><td [title]="row.id"><button class="service-link" (click)="openService(row.id)">{{row.name}}</button></td><td><span class="health-pill" [attr.data-health]="health(row)">{{health(row)}}</span></td>
           <td *ngFor="let col of columns"><ng-container *ngIf="row.metrics[col.key] as metric; else missing"><span [class.error-value]="col.key === 'failure' && metric.metricValue > 0" [title]="'Window ended: ' + metric.windowEndUtc">{{metric.metricValue | number:'1.0-2'}}</span></ng-container><ng-template #missing>—</ng-template></td>
         </tr></tbody>
       </table></div>
@@ -68,6 +82,6 @@
         No metrics collected for {{selectedPlatform}} yet. Check connector settings and source permissions.
       </article>
     </section>
-    <div class="bottom"><strong>Data integrity:</strong> each item includes its source, observation window, and last collection timestamp. Real-time refresh does not guarantee that a source delivered fresh data.</div>
+    <footer class="bottom">Source windows and collection times are shown with the data. Refresh cadence does not imply source freshness.</footer>
   </main>
 </div>
