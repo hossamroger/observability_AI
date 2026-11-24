@@ -5,16 +5,7 @@ final class BigQueryPerformanceSql {
     private BigQueryPerformanceSql() { }
 
     static String appendMetrics() {
-        return ", session_events AS (SELECT *, MIN(IF(event_name='session_start',event_timestamp,NULL)) "
-            + "OVER (PARTITION BY platform,user_pseudo_id,session_id) AS started_at FROM scoped "
-            + "WHERE platform IN ('ANDROID','IOS') AND user_pseudo_id IS NOT NULL AND session_id IS NOT NULL "
-            + "AND event_name IN ('session_start','screen_view')), "
-            + "session_journeys AS (SELECT platform,user_pseudo_id,session_id,started_at, "
-            + "IF(COUNT(DISTINCT IF(event_name='session_start' AND event_timestamp=started_at,app_version,NULL))=1, MAX(IF(event_name='session_start' AND event_timestamp=started_at,app_version,NULL)),NULL) AS session_version, "
-            + "MIN(IF(event_name='screen_view' AND event_timestamp BETWEEN started_at AND started_at+300000000,event_timestamp,NULL)) AS first_screen_at, "
-            + "MIN(IF(event_name='screen_view' AND screen_name=@home_screen AND event_timestamp BETWEEN started_at AND started_at+300000000,event_timestamp,NULL)) AS home_at "
-            + "FROM session_events WHERE started_at IS NOT NULL AND started_at < UNIX_MICROS(@end)-300000000 "
-            + "GROUP BY platform,user_pseudo_id,session_id,started_at), "
+        return sessionJourneys() + ", "
             + "session_counts AS (SELECT platform,COUNT(*) AS eligible FROM session_journeys GROUP BY platform), "
             + "payment_attempts AS (SELECT user_pseudo_id,transaction_id, "
             + "MIN(IF(event_name='payment_initiated',event_timestamp,NULL)) AS initiated_at, "
@@ -49,6 +40,19 @@ final class BigQueryPerformanceSql {
             + "SELECT platform,metric_name,metric_value,'GA4_INTRADAY' AS metric_scope FROM base_metrics "
             + "UNION ALL SELECT platform,metric_name,metric_value,'GA4_INTRADAY' FROM performance_metrics "
             + "UNION ALL SELECT platform,metric_name,metric_value,metric_scope FROM version_metrics ORDER BY platform,metric_scope,metric_name";
+    }
+
+    static String sessionJourneys() {
+        return ", session_events AS (SELECT *, MIN(IF(event_name='session_start',event_timestamp,NULL)) "
+            + "OVER (PARTITION BY platform,user_pseudo_id,session_id) AS started_at FROM scoped "
+            + "WHERE platform IN ('ANDROID','IOS') AND user_pseudo_id IS NOT NULL AND session_id IS NOT NULL "
+            + "AND event_name IN ('session_start','screen_view')), "
+            + "session_journeys AS (SELECT platform,user_pseudo_id,session_id,started_at, "
+            + "IF(COUNT(DISTINCT IF(event_name='session_start' AND event_timestamp=started_at,app_version,NULL))=1, MAX(IF(event_name='session_start' AND event_timestamp=started_at,app_version,NULL)),NULL) AS session_version, "
+            + "MIN(IF(event_name='screen_view' AND event_timestamp BETWEEN started_at AND started_at+300000000,event_timestamp,NULL)) AS first_screen_at, "
+            + "MIN(IF(event_name='screen_view' AND screen_name=@home_screen AND event_timestamp BETWEEN started_at AND started_at+300000000,event_timestamp,NULL)) AS home_at "
+            + "FROM session_events WHERE started_at IS NOT NULL AND started_at < UNIX_MICROS(@end)-300000000 "
+            + "GROUP BY platform,user_pseudo_id,session_id,started_at)";
     }
 
     static String metricUnit(String metric) {
