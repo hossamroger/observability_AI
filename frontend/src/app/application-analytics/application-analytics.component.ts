@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { DashboardService } from '../dashboard.service';
+import { DEFAULT_THRESHOLDS, evaluateInsights, Finding, InsightResult, InsightThresholds, validThresholds } from './reliability-insights';
 import { MetricObservation, Platform, SourceOutcome, ApplicationRange } from '../metric.model';
 
 interface MetricDefinition {
@@ -24,6 +25,63 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
   @Input('selectedMetrics') liveMetrics: MetricObservation[] = [];
   rangeChoice = 'live';
   activeSection = 'overview';
+  private readonly insightStorageKey = 'observability.insightThresholds.v1';
+  insightThresholds:InsightThresholds = this.loadInsightThresholds();
+  insightDraft:InsightThresholds = {...this.insightThresholds};
+  insightSettingsError = '';
+  insightSettingsNote = '';
+  readonly insightFields: {key:keyof InsightThresholds;label:string;step:number}[] = [
+    {key:'minSamples',label:'Minimum samples',step:1},
+    {key:'firstP95Warning',label:'First screen P95 warning (s)',step:.1},
+    {key:'firstP95Critical',label:'First screen P95 critical (s)',step:.1},
+    {key:'homeP95Warning',label:'Home P95 warning (s)',step:.1},
+    {key:'homeP95Critical',label:'Home P95 critical (s)',step:.1},
+    {key:'firstCoverageWarning',label:'First screen coverage warning (%)',step:.1},
+    {key:'firstCoverageCritical',label:'First screen coverage critical (%)',step:.1},
+    {key:'homeCoverageWarning',label:'Home coverage warning (%)',step:.1},
+    {key:'homeCoverageCritical',label:'Home coverage critical (%)',step:.1},
+    {key:'slowShareWarning',label:'Over 10s share warning (%)',step:.1},
+    {key:'slowShareCritical',label:'Over 10s share critical (%)',step:.1},
+    {key:'versionIncreasePercent',label:'Version P95 increase (%)',step:1},
+    {key:'versionIncreaseSeconds',label:'Version P95 increase (s)',step:.1}
+  ];
+  private loadInsightThresholds(): InsightThresholds {
+    try {
+      const saved=localStorage.getItem(this.insightStorageKey);
+      const candidate={...DEFAULT_THRESHOLDS,...(saved ? JSON.parse(saved) : {})};
+      if(validThresholds(candidate)) return candidate;
+    } catch { /* Storage may be disabled. */ }
+    return {...DEFAULT_THRESHOLDS};
+  }
+  saveInsightThresholds():void {
+    this.insightSettingsNote='';
+    if(!validThresholds(this.insightDraft)) {
+      this.insightSettingsError='Enter positive values, 20–100,000 whole samples, valid percentages and correctly ordered warning/critical thresholds.';
+      return;
+    }
+    this.insightSettingsError='';
+    this.insightThresholds={...this.insightDraft};
+    try { localStorage.setItem(this.insightStorageKey,JSON.stringify(this.insightThresholds)); this.insightSettingsNote='Saved in this browser.'; }
+    catch { this.insightSettingsNote='Applied for this session; browser storage unavailable.'; }
+  }
+  resetInsightThresholds():void {
+    this.insightDraft={...DEFAULT_THRESHOLDS};
+    this.saveInsightThresholds();
+  }
+  trackFinding(index:number, finding:Finding):string { return finding.id; }
+  get insightResult():InsightResult {
+    return evaluateInsights({platform:this.selectedPlatform,metrics:this.selectedMetrics,
+      sourceState:this.freshness(this.bigQueryWindow,'BIGQUERY'),historical:!!this.rangeReport,
+      nowMs:Date.now(),thresholds:this.insightThresholds});
+  }
+  get experienceTimings():{label:string;average:number|null;p95:number|null;samples:number|undefined}[] {
+    return [{label:'First screen',key:'session_to_first_screen'},{label:'Home screen',key:'session_to_home'}].map(stage=>{
+      const avg=this.performanceMetric(stage.key+'_average_ms'), p95=this.performanceMetric(stage.key+'_p95_ms');
+      return {label:stage.label,average:avg?this.displayValue(avg):null,p95:p95?this.displayValue(p95):null,
+        samples:this.performanceMetric(stage.key+'_samples')?.metricValue};
+    });
+  }
+
   versionSearch = '';
   versionSort = 'session_start_eligible_sessions';
   versionDescending = true;
@@ -271,11 +329,7 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
   }
 
   get primaryOverviewMetrics(): MetricDefinition[] {
-    return this.isMobile ? this.overviewMetrics.slice(0, 2) : this.overviewMetrics;
-  }
-
-  get secondaryOverviewMetrics(): MetricDefinition[] {
-    return this.isMobile ? this.overviewMetrics.slice(2) : [];
+    return this.overviewMetrics;
   }
 
   get overviewCoverage(): {label:string;rate:number|null}[] {

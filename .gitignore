@@ -21,3 +21,5 @@
 *.trace.db
 *.lock.db
 .observability-platform/
+
+**/out-tsc/
