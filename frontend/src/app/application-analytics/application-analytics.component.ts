@@ -97,6 +97,8 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
     });
   }
 
+  trackHistoryOption(index: number, option: {key:string;label:string}): string { return option.key; }
+
   get historyOptions(): {key:string;label:string}[] {
     const items = [{key:'observed_sessions',label:'Observed sessions'},{key:'observed_events',label:'Observed events'}];
     if (this.isMobile) items.push({key:'session_to_home_p95_ms',label:'Home screen P95 (s)'},{key:'session_to_first_screen_p95_ms',label:'First screen P95 (s)'},{key:'payment_initiated_events',label:'Payment initiated events'});
