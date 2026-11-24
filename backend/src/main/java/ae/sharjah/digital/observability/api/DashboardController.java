@@ -54,8 +54,8 @@ public class DashboardController {
     }
 
     @GetMapping("/overview")
-    public Map<String, Object> overview() {
-        List<MetricObservation> metrics = snapshots.findLatestPerMetric(demoMode);
+    public Map<String, Object> overview(@org.springframework.web.bind.annotation.RequestParam(defaultValue="true") boolean includeServiceMetrics) {
+        List<MetricObservation> metrics = snapshots.findLatestPerMetric(demoMode, includeServiceMetrics);
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("dataMode", demoMode ? "DEMO" : "LIVE");
         response.put("generatedAtUtc", Instant.now().toString());
