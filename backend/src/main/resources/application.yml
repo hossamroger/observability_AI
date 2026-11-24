@@ -16,6 +16,9 @@ management:
 monitoring:
   collection:
     interval-ms: 30000
+    dispatch-interval-ms: 1000
+    worker-count: 4
+    managed-executor-jndi: ${OBS_MANAGED_EXECUTOR_JNDI:java:comp/DefaultManagedExecutorService}
   collector:
     enabled: false
   demo:
