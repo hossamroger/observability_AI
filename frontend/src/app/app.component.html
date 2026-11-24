@@ -6,13 +6,13 @@
             [class.active]="selectedPlatform === platform" (click)="selectPlatform(platform)">
       {{platform === 'BACKEND' ? 'Backend / Infrastructure' : platform}}
     </button>
-    <div class="sidebar-note">GA4 · Dynatrace · ELK<br>Oracle 19c</div>
+    <div class="sidebar-note">GA4 · BigQuery · Dynatrace · ELK<br>Oracle 19c</div>
   </aside>
   <main>
     <header>
       <div><div class="eyebrow">OBSERVABILITY / {{selectedPlatform}}</div><h1>{{selectedPlatform}} Monitoring</h1>
       <p>Activity, availability and service health in one place</p></div>
-      <div class="status">Auto-updates every 30 sec<br><small>Last received: {{lastUpdated}}</small></div>
+      <div class="status">Dashboard refresh every 30 sec<br><small>Last received: {{lastUpdated}}</small></div>
     </header>
     <div class="notice demo" *ngIf="overview?.dataMode === 'DEMO'">DEMO DATA — all values are illustrative, not real monitoring results.</div>
     <div class="notice error" *ngIf="errorMessage">{{errorMessage}}</div>
@@ -56,59 +56,9 @@
         </svg>
       </section>
     </section>
-    <div class="notice" *ngIf="selectedPlatform !== 'BACKEND'">
-      GA4 Realtime reports active users and events over its rolling 30-minute window.
-      BigQuery reports observed events from a separate, delayed window; counts may be incomplete.
-      Payment and workflow event counts are not transaction success rates.
-    </div>
-    <section class="service-panel" *ngIf="selectedPlatform === 'ANDROID' || selectedPlatform === 'IOS'">
-      <h2>Application journey performance</h2>
-      <p class="service-note" *ngIf="bigQueryWindow as window">BigQuery window: {{window.windowStartUtc | date:'medium'}} – {{window.windowEndUtc | date:'medium'}} · Collected {{window.collectedAtUtc | date:'medium'}}</p>
-      <p class="service-note">Eligible sessions with 5 minutes of observation: {{performanceMetric('session_start_eligible_sessions')?.metricValue ?? '—'}}</p>
-      <div class="table-scroll"><table class="service-table performance-table">
-        <thead><tr><th>Journey</th><th *ngFor="let col of durationColumns">{{col.label}}</th></tr></thead>
-        <tbody><tr *ngFor="let journey of durationRows"><td>{{journey.label}}</td>
-          <td *ngFor="let col of durationColumns"><ng-container *ngIf="performanceMetric(journey.key + '_' + col.key) as m; else noSample">{{displayValue(m) | number:'1.0-2'}}</ng-container><ng-template #noSample>—</ng-template></td>
-        </tr></tbody>
-      </table></div>
-      <p class="service-note">GA4 event timestamp differences, not native cold-start or payment gateway timings. Session journeys use a 5-minute follow-up; approximate percentiles include matched observations only. Missing values are not zero.</p>
-      <p class="service-note" *ngIf="selectedPlatform === 'IOS'">Payment timing requires exactly one distinct initiation timestamp and one purchase timestamp for the same pseudonymous user and transaction within this window. Unmatched payments are not failures.</p>
-      <p class="service-note" *ngIf="selectedPlatform === 'ANDROID'">Payment duration unavailable: matching completion events and transaction IDs have not been established.</p>
-    </section>
-    <section class="service-panel" *ngIf="selectedPlatform === 'ANDROID' || selectedPlatform === 'IOS'">
-      <h2>Session journey coverage</h2>
-      <p class="service-note">Eligible sessions: {{eligibleSessions ?? '—'}}. Each stage is measured against the same eligible cohort, not a count of unique users.</p>
-      <div class="journey-stage" *ngFor="let stage of sessionStages">
-        <div class="journey-label"><strong>{{stage.label}}</strong><span>{{performanceMetric(stage.key + '_samples')?.metricValue ?? '—'}} / {{eligibleSessions ?? '—'}}
-          · {{(percent(performanceMetric(stage.key + '_samples')?.metricValue,eligibleSessions) | number:'1.0-1') ?? '—'}}%</span></div>
-        <div class="journey-track"><div class="journey-fill" [style.width.%]="percent(performanceMetric(stage.key + '_samples')?.metricValue,eligibleSessions) ?? 0"></div></div>
-        <p class="service-note">Not observed within 5 minutes: {{notObserved(performanceMetric(stage.key + '_samples')?.metricValue) ?? '—'}}</p>
-      </div>
-      <h3>Slow matched sessions</h3>
-      <div class="table-scroll"><table class="service-table">
-        <thead><tr><th>Journey</th><th *ngFor="let threshold of slowThresholds">&gt; {{threshold}}s</th></tr></thead>
-        <tbody><tr *ngFor="let stage of sessionStages"><td>{{stage.label}}</td>
-          <td *ngFor="let threshold of slowThresholds">{{performanceMetric(stage.key + '_over_' + threshold + 's')?.metricValue ?? '—'}}</td>
-        </tr></tbody>
-      </table></div>
-      <p class="service-note">Threshold counts overlap and exclude unobserved stages. A missing event is not proof of a failed session.</p>
-    </section>
-    <section class="service-panel" *ngIf="selectedPlatform === 'ANDROID' || selectedPlatform === 'IOS'">
-      <h2>Application version comparison</h2>
-      <p class="service-note">Up to 20 versions per platform, ranked by eligible sessions in the current BigQuery window. Version is taken from the session start event; unknown or ambiguous versions are grouped separately. Times in seconds.</p>
-      <div class="table-scroll"><table class="service-table">
-        <thead><tr><th>App version</th><th>Sessions</th><th>First screen %</th><th>Home %</th><th>First P50</th><th>First P95</th><th>First P99</th><th>Home P50</th><th>Home P95</th><th>Home P99</th></tr></thead>
-        <tbody><tr *ngFor="let row of versionRows"><td>{{row.version}}</td><td>{{row.metrics['session_start_eligible_sessions']}}</td>
-          <td>{{(percent(row.metrics['session_to_first_screen_samples'],row.metrics['session_start_eligible_sessions']) | number:'1.0-1') ?? '—'}}</td>
-          <td>{{(percent(row.metrics['session_to_home_samples'],row.metrics['session_start_eligible_sessions']) | number:'1.0-1') ?? '—'}}</td>
-          <td *ngFor="let key of ['session_to_first_screen_p50_ms','session_to_first_screen_p95_ms','session_to_first_screen_p99_ms','session_to_home_p50_ms','session_to_home_p95_ms','session_to_home_p99_ms']">{{(row.metrics[key] | number:'1.0-2') ?? '—'}}</td>
-        </tr></tbody>
-      </table></div>
-      <p *ngIf="!versionRows.length">No version-level observations in the latest window.</p>
-      <p class="service-note">Compare sample sizes before drawing conclusions; approximate tail percentiles are less reliable for small cohorts.</p>
-    </section>
-    <section class="cards">
-      <article class="metric-card" *ngFor="let metric of (selectedPlatform === 'BACKEND' ? backendOtherMetrics : activityMetrics)">
+    <app-application-analytics *ngIf="selectedPlatform !== 'BACKEND'" [selectedPlatform]="selectedPlatform" [selectedMetrics]="selectedMetrics" [loading]="loading"></app-application-analytics>
+    <section class="cards" *ngIf="selectedPlatform === 'BACKEND'">
+      <article class="metric-card" *ngFor="let metric of backendOtherMetrics">
         <div class="source">{{metric.sourceSystem}} · {{metric.serviceName}}</div>
         <div class="metric-value">{{metric.metricValue | number:'1.0-2'}} <span>{{metric.metricUnit}}</span></div>
         <div class="metric-name">{{metric.metricName.replaceAll('_', ' ')}}</div>
