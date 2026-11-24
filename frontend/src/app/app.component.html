@@ -37,12 +37,12 @@
         <div><small>Services reporting errors</small><strong [class.summary-warning]="serviceSummaryAvailable && servicesWithErrors > 0">{{serviceSummaryAvailable ? servicesWithErrors : '—'}}</strong></div>
         <div><small>Critical services</small><strong [class.summary-critical]="serviceSummaryAvailable && criticalServices > 0">{{serviceSummaryAvailable ? criticalServices : '—'}}</strong></div>
       </div>
-      <div class="service-toolbar service-heading"><h2>Service performance</h2><span class="service-note">Dynatrace · {{filteredRows.length}} matching services</span></div>
+      <div class="service-toolbar service-heading"><h2>Service performance</h2><span class="service-note">Dynatrace · {{serviceSummaryAvailable ? filteredRows.length : '—'}} matching services</span></div>
       <div class="service-filters">
         <div class="window-options" role="group" aria-label="Service reporting window">
           <button type="button" *ngFor="let minutes of windows" [class.chosen]="windowMinutes === minutes" [attr.aria-pressed]="windowMinutes === minutes" [disabled]="windowMinutes === minutes || windowLoading" (click)="selectWindow(minutes)">{{minutes}} min</button>
         </div>
-        <label class="health-filter">Health <select #healthSelect [value]="healthFilter" (change)="healthFilter = healthSelect.value; page = 0"><option *ngFor="let status of ['ALL','CRITICAL','WARNING','HEALTHY','LOW TRAFFIC','UNKNOWN']">{{status}}</option></select></label>
+        <label class="health-filter">Health <select #healthSelect [value]="healthFilter" (change)="healthFilter = healthSelect.value; page = 0"><option *ngFor="let status of ['ALL','CRITICAL','WARNING','HEALTHY','LOW TRAFFIC','UNKNOWN']" [value]="status" [selected]="healthFilter === status">{{status}}</option></select></label>
         <div class="service-search"><input #searchBox type="search" aria-label="Search services" placeholder="Search services or IDs" [value]="search" (input)="setSearch(searchBox.value)"><button type="button" *ngIf="search || healthFilter !== 'ALL'" (click)="clearServiceFilters()">Clear filters</button></div>
       </div>
       <div class="service-window-meta">
