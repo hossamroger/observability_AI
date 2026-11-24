@@ -35,7 +35,7 @@
   <div class="kpi-grid">
     <div class="kpi" *ngFor="let metric of overviewMetrics">
       <span>{{metric.label}}</span><strong>{{(value(metric) | number:'1.0-2') ?? '—'}}</strong>
-      <small>{{metric.source === 'GA4' ? 'GA4 Realtime' : 'BigQuery'}}</small>
+      <small>{{metric.source === 'GA4' ? 'GA4 Realtime · last 30 min' : 'BigQuery'}}</small>
     </div>
   </div>
 </section>
@@ -117,7 +117,7 @@
       <line x1="44" y1="175" x2="744" y2="175" stroke="#94a3b8"/><line x1="44" y1="30" x2="44" y2="175" stroke="#94a3b8"/>
       <text x="44" y="21" font-size="11">{{historyMax | number:'1.0-2'}}</text><text x="28" y="175" font-size="11">0</text>
       <svg:circle *ngFor="let point of historyPoints" [attr.cx]="point.x" [attr.cy]="point.y" r="3" fill="#2672e8"><svg:title>{{point.time | date:'medium'}}: {{point.value | number:'1.0-2'}}</svg:title></svg:circle>
-      <text x="44" y="195" font-size="11">Earlier</text><text x="744" y="195" text-anchor="end" font-size="11">Latest stored point</text>
+      <text x="44" y="195" font-size="11">Earlier</text><text x="744" y="195" text-anchor="end" font-size="11">Request time</text>
     </svg>
     <p class="service-note">{{historyRows.length}} observations · Latest {{historyRows[historyRows.length-1].windowEndUtc | date:'medium'}}</p>
   </ng-container>
