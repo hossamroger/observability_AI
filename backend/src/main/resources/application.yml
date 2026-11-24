@@ -38,6 +38,7 @@ monitoring:
     interval-ms: 300000
     maximum-bytes-billed: 1073741824
     lag-seconds: 120
+    home-screen-name: ${BIGQUERY_HOME_SCREEN_NAME:home_page}
   dynatrace:
     enabled: false
     url: ${DYNATRACE_URL:}
