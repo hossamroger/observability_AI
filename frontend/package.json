@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "start": "ng serve --proxy-config proxy.conf.json --host 127.0.0.1",
-    "build": "ng build"
+    "build": "ng build",
+    "test:insights": "tsc --strict --skipLibCheck --target ES2022 --module commonjs --outDir out-tsc/insights src/app/application-analytics/reliability-insights.test.ts && node out-tsc/insights/application-analytics/reliability-insights.test.js"
   },
   "dependencies": {
     "@angular/common": "~19.2.0",
