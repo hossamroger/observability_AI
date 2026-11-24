@@ -39,7 +39,21 @@ public class ApplicationRangeService {
         if (!enabled || connector == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "On-demand analytics disabled");
         Instant latest = connector.latestAvailableEnd();
         Instant[] window = resolveWindow(minutes, from, to, latest);
-        String key = window[0] + "/" + window[1];
+        return runReport(connector, window, 0);
+    }
+
+    public Map<String, Object> history(int minutes) {
+        if (!Arrays.asList(60, 360, 1440).contains(minutes))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid history period");
+        BigQueryGa4Connector connector = connectors.getIfAvailable();
+        if (!enabled || connector == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "On-demand analytics disabled");
+        int bucket = minutes == 60 ? 300 : minutes == 360 ? 900 : 3600;
+        Instant[] window = resolveWindow(minutes, null, null, connector.latestAvailableEnd());
+        return runReport(connector, window, bucket);
+    }
+
+    private Map<String, Object> runReport(BigQueryGa4Connector connector, Instant[] window, int bucketSeconds) {
+        String key = bucketSeconds + "/" + window[0] + "/" + window[1];
         synchronized (this) {
             CachedRange existing = cache.get(key);
             if (existing != null && System.nanoTime() - existing.createdNanos < TimeUnit.MINUTES.toNanos(5)) return existing.response;
@@ -50,12 +64,14 @@ public class ApplicationRangeService {
             lastStarted = System.nanoTime();
         }
         try {
-            CollectionBatch batch = connector.collectWindow(window[0], window[1]);
+            CollectionBatch batch = bucketSeconds == 0 ? connector.collectWindow(window[0], window[1])
+                    : connector.collectHistory(window[0], window[1], bucketSeconds);
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("windowStartUtc", window[0].toString());
             response.put("windowEndUtc", window[1].toString());
             response.put("generatedAtUtc", Instant.now().toString());
             response.put("partial", batch.partial);
+            response.put("bucketSeconds", bucketSeconds);
             response.put("metrics", batch.observations);
             synchronized (this) {
                 cache.put(key, new CachedRange(response));
@@ -63,6 +79,7 @@ public class ApplicationRangeService {
             }
             return response;
         } catch (RuntimeException failure) {
+            org.slf4j.LoggerFactory.getLogger(ApplicationRangeService.class).warn("event=application_report_failed bucket_seconds={} category={}", bucketSeconds, failure.getClass().getSimpleName());
             // Vendor exception bodies are deliberately not returned to callers.
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "BigQuery reporting request failed");
         } finally {
