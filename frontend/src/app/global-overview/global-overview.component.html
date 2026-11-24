@@ -1,0 +1,73 @@
+<section class="source-strip" aria-label="Scheduled data source status">
+  <div class="strip-title"><strong>Data sources</strong><small>Latest collection</small></div>
+  <div class="source-item" *ngFor="let source of sources">
+    <span class="source-mark" [attr.data-source]="source.key">{{source.key==='BIGQUERY'?'BQ':source.key==='DYNATRACE'?'DT':source.key}}</span>
+    <div><strong>{{source.name}}</strong><div class="source-status" [attr.data-tone]="source.tone"><i></i>{{source.label}}</div><small *ngIf="source.time">{{source.time | date:'MMM d, HH:mm:ss'}}</small></div>
+  </div>
+</section>
+<div class="section-label"><h2>Platform overview</h2><span>Live source windows · independent collection times</span></div>
+<section class="platform-grid" aria-label="Platform assessments">
+  <button class="platform-card" type="button" *ngFor="let p of summaries; trackBy:trackPlatform" (click)="platformSelected.emit(p.platform)">
+    <div class="platform-heading"><strong>{{p.name}}</strong><span class="state" [attr.data-tone]="p.tone">{{p.status}}</span><span class="arrow" aria-hidden="true">›</span></div>
+    <div class="platform-metrics">
+      <div><span>Active users</span><strong>{{(p.users | number:'1.0-0') ?? '—'}}</strong></div>
+      <div><span>Sessions</span><strong>{{(p.sessions | number:'1.0-0') ?? '—'}}</strong></div>
+      <div *ngIf="p.platform!=='WEB'"><span>Home P95</span><strong>{{(p.homeP95 | number:'1.0-1') ?? '—'}}<small *ngIf="p.homeP95 != null">s</small></strong></div>
+      <div *ngIf="p.platform==='WEB'"><span>Workflow failure events</span><strong>{{(p.workflowFailures | number:'1.0-0') ?? '—'}}</strong></div>
+    </div>
+    <div class="platform-footer"><span *ngIf="p.platform!=='WEB'">Home observed: {{(p.coverage | number:'1.0-1') ?? '—'}}<ng-container *ngIf="p.coverage != null">%</ng-container></span><span>{{p.assessment.evaluated}} checks · {{p.assessment.skipped}} skipped</span></div>
+  </button>
+  <button class="platform-card" type="button" (click)="platformSelected.emit('BACKEND')">
+    <div class="platform-heading"><strong>Backend</strong><span class="state" [attr.data-tone]="backendTone">{{backendStatus}}</span><span class="arrow" aria-hidden="true">›</span></div>
+    <div class="platform-metrics"><div><span>Services</span><strong>{{backendAvailable ? services.length : '—'}}</strong></div><div><span>With errors</span><strong>{{backendAvailable ? errorServices : '—'}}</strong></div><div><span>Critical</span><strong [class.critical-text]="backendAvailable && criticalServices>0">{{backendAvailable ? criticalServices : '—'}}</strong></div></div>
+    <div class="platform-footer"><span>Dynatrace · 30 min</span><span>{{backendAvailable ? unknownServices+' limited/unknown' : 'No current assessment'}}</span></div>
+  </button>
+</section>
+<div class="command-grid">
+  <section class="panel insights">
+    <header><h2>Reliability insights</h2><small>Application rules · not confirmed incidents</small></header>
+    <div class="finding-filter" role="group" aria-label="Filter findings">
+      <button *ngFor="let filter of ['all','critical','warning','info']" type="button" [class.selected]="severityFilter===filter" [attr.aria-pressed]="severityFilter===filter" [attr.data-tone]="filter" (click)="setSeverity(filter)">{{filter==='all'?'All':filter}} <strong>{{filter==='all'?findings.length:findingCount(filter)}}</strong></button>
+    </div>
+    <div class="finding-list">
+      <article *ngFor="let f of visibleFindings;trackBy:trackFinding" class="finding" [attr.data-tone]="f.severity">
+        <span class="finding-icon" aria-hidden="true">{{f.severity==='info'?'i':'!'}}</span>
+        <div><div class="finding-title"><strong>{{f.title}}</strong><span class="state" [attr.data-tone]="f.severity">{{f.severity}}</span></div><p>{{f.evidence}}</p><details><summary>Recommended action</summary><p>{{f.action}}</p></details></div>
+        <button type="button" class="text-link" (click)="platformSelected.emit(f.platform)">{{f.platformName}} ›</button>
+      </article>
+      <p class="empty" *ngIf="!visibleFindings.length">No findings for this filter. This is not a guarantee of application health.</p>
+    </div>
+    <button class="text-link more" type="button" *ngIf="filteredFindings.length>5" (click)="showAllFindings=!showAllFindings">{{showAllFindings?'Show fewer':'View all '+filteredFindings.length+' findings'}}</button>
+  </section>
+  <section class="panel activity">
+    <header><h2>Activity & payments</h2><small>Per-platform observations</small></header>
+    <div class="table-scroll"><table><thead><tr><th>Platform</th><th>Active users</th><th>Sessions</th></tr></thead><tbody><tr *ngFor="let p of summaries;trackBy:trackPlatform"><td>{{p.name}}</td><td>{{(p.users | number:'1.0-0') ?? '—'}}</td><td>{{(p.sessions | number:'1.0-0') ?? '—'}}</td></tr></tbody></table></div>
+    <p class="note">GA4 active users and BigQuery sessions use independent windows. No cross-platform unique-user total.</p>
+    <h3>Payment events</h3>
+    <div class="table-scroll"><table><thead><tr><th>Platform</th><th>Initiated</th><th>Purchase</th><th>Failure</th></tr></thead><tbody><tr *ngFor="let p of summaries"><ng-container *ngIf="p.platform!=='WEB'"><td>{{p.name}}</td><td>{{(p.paymentInitiated | number:'1.0-0') ?? '—'}}</td><td>{{(p.purchases | number:'1.0-0') ?? '—'}}</td><td [class.critical-text]="(p.paymentFailures??0)>0">{{(p.paymentFailures | number:'1.0-0') ?? '—'}}</td></ng-container></tr></tbody></table></div>
+    <p class="note">Android outcomes unavailable. Counts are events, not transaction success rates.</p>
+  </section>
+  <section class="panel trends">
+    <header><h2>Sessions trend</h2><small>BigQuery history</small></header>
+    <div class="trend-controls"><label>Period <select #period [value]="trendPeriod" [disabled]="trendLoading" (change)="selectPeriod(period.value)"><option value="60">1 hour</option><option value="360">6 hours</option><option value="1440">24 hours</option></select></label><button type="button" class="primary" [disabled]="trendLoading" (click)="loadTrend()">{{trendLoading?'Loading…':'Load trend'}}</button></div>
+    <div class="legend" role="group" aria-label="Toggle platform series"><button *ngFor="let p of apps" type="button" [attr.aria-pressed]="enabledPlatforms[p]" [class.inactive]="!enabledPlatforms[p]" (click)="togglePlatform(p)"><i [style.background]="colors[p]"></i>{{names[p]}}</button></div>
+    <p class="note" *ngIf="trendReport">{{trendReport.windowStartUtc | date:'MMM d, HH:mm'}} – {{trendReport.windowEndUtc | date:'MMM d, HH:mm'}} · {{(trendReport.bucketSeconds??0)/60}} min buckets</p>
+    <p class="empty" *ngIf="!trendReport&&!trendLoading&&!trendError">Load a report to compare sessions across platforms.</p><p class="empty" role="status" *ngIf="trendLoading">Loading historical observations…</p><p class="error" role="alert" *ngIf="trendError">{{trendError}} Any previous report is unchanged.</p>
+    <p class="empty" *ngIf="trendReport&&!trendHasData&&!trendLoading">No observations for the enabled platforms.</p>
+    <svg *ngIf="trendHasData" viewBox="0 0 630 195" class="chart" role="img" aria-label="Observed sessions by platform and time bucket">
+      <svg:g *ngFor="let grid of trendGrid"><svg:line x1="48" x2="608" [attr.y1]="grid.y" [attr.y2]="grid.y" stroke="var(--border)" stroke-dasharray="3 3"/><svg:text x="42" [attr.y]="grid.y+3" text-anchor="end">{{grid.value | number:'1.0-0'}}</svg:text></svg:g>
+      <svg:g *ngFor="let series of trendSeries"><svg:line *ngFor="let segment of series.segments" [attr.x1]="segment.a.x" [attr.y1]="segment.a.y" [attr.x2]="segment.b.x" [attr.y2]="segment.b.y" [attr.stroke]="series.color" stroke-width="2"/><svg:circle *ngFor="let point of series.points" [attr.cx]="point.x" [attr.cy]="point.y" [attr.fill]="series.color" r="3" tabindex="0" [attr.aria-label]="series.name+' '+(point.time | date:'medium')+' '+point.value+' sessions'"><svg:title>{{series.name}} · {{point.time | date:'MMM d, HH:mm'}} · {{point.value | number:'1.0-0'}} sessions</svg:title></svg:circle></svg:g>
+      <svg:text *ngFor="let tick of trendTicks;let i=index" [attr.x]="48+i*140" y="186" text-anchor="middle">{{tick | date:'HH:mm'}}</svg:text>
+    </svg>
+    <p class="note">One explicit historical query; no automatic BigQuery refresh. Sessions may span multiple buckets. Missing buckets are not zero.</p>
+  </section>
+  <section class="panel services">
+    <header><h2>Top impacted services</h2><button class="text-link" type="button" (click)="platformSelected.emit('BACKEND')">View all ›</button></header>
+    <p class="note" *ngIf="backendAvailable">Ranked by failed calls · {{serviceStart | date:'MMM d, HH:mm'}} – {{serviceEnd | date:'MMM d, HH:mm'}} · current Dynatrace scope</p>
+    <p class="error" role="alert" *ngIf="serviceError">{{serviceError}}</p>
+    <p class="empty" *ngIf="!backendAvailable&&!serviceError">{{serviceLoading?'Loading service observations…':'No fresh service observations.'}}</p>
+    <p class="empty" *ngIf="backendAvailable&&!topServices.length">No positive failed-call counts in the available observations.</p>
+    <div class="table-scroll" *ngIf="topServices.length"><table><thead><tr><th>Service</th><th>Requests</th><th>Failed</th><th>Failure %</th><th>P95 ms</th><th>Health</th></tr></thead><tbody><tr *ngFor="let s of topServices"><td><button class="text-link service-name" type="button" (click)="serviceSelected.emit(s.id)">{{s.name}}</button></td><td>{{(s.requests | number:'1.0-0') ?? '—'}}</td><td>{{(s.failed | number:'1.0-0') ?? '—'}}</td><td>{{(s.failure | number:'1.0-2') ?? '—'}}</td><td>{{(s.p95 | number:'1.0-2') ?? '—'}}</td><td><span class="state" [attr.data-tone]="s.health==='CRITICAL'?'critical':s.health==='WARNING'?'warning':'neutral'">{{s.health}}</span></td></tr></tbody></table></div>
+    <p class="note">Failed calls are not affected-user counts. Scope can include external or unmonitored services; production ownership has not been verified.</p>
+  </section>
+</div>
