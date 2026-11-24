@@ -199,14 +199,32 @@ export class AppComponent implements OnInit, OnDestroy {
 
   get selectedMetrics(): MetricObservation[] {
     const data = this.overview?.metrics ?? [];
+    const latestBigQuery = Math.max(...data.filter(m => m.platform === this.selectedPlatform && m.sourceSystem === 'BIGQUERY').map(m => Date.parse(m.windowEndUtc)));
     const seen = new Set<string>();
     return data.filter(metric => {
       if (metric.platform !== this.selectedPlatform) return false;
+      if (metric.sourceSystem === 'BIGQUERY' && Date.parse(metric.windowEndUtc) !== latestBigQuery) return false;
       const key = `${metric.sourceSystem}|${metric.serviceName}|${metric.metricName}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
+  }
+
+  readonly durationColumns = [
+    {key:'samples',label:'Samples'}, {key:'average_ms',label:'Average (ms)'}, {key:'p50_ms',label:'P50 (ms)'}, {key:'p95_ms',label:'P95 (ms)'}, {key:'p99_ms',label:'P99 (ms)'}
+  ];
+  get durationRows(): {key:string;label:string}[] {
+    const rows = [{key:'session_to_first_screen',label:'Session start → First screen'}, {key:'session_to_home',label:'Session start → Home screen'}];
+    if (this.selectedPlatform === 'IOS') rows.push({key:'payment_to_purchase',label:'Payment initiated → Purchase'});
+    return rows;
+  }
+  get bigQueryWindow(): MetricObservation | undefined { return this.selectedMetrics.find(m => m.sourceSystem === 'BIGQUERY'); }
+  performanceMetric(name: string): MetricObservation | undefined {
+    return this.selectedMetrics.find(m => m.sourceSystem === 'BIGQUERY' && m.metricName === name);
+  }
+  get activityMetrics(): MetricObservation[] {
+    return this.selectedMetrics.filter(m => m.sourceSystem !== 'BIGQUERY' || !/^(session_to_|payment_to_|session_start_eligible_sessions$)/.test(m.metricName));
   }
 
   get lastUpdated(): string {
