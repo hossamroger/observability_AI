@@ -67,7 +67,7 @@
       </table></div>
       <p class="service-empty" *ngIf="!visibleRows.length && !windowLoading && !windowError">{{serviceRows.length ? 'No services match these filters.' : 'No service observations in this window.'}}</p>
       <div class="service-pagination" *ngIf="filteredRows.length"><button [disabled]="currentPage === 0" (click)="page = currentPage - 1">Previous</button><span>Page {{currentPage + 1}} / {{pageCount}} · {{filteredRows.length}} services</span><button [disabled]="currentPage + 1 >= pageCount" (click)="page = currentPage + 1">Next</button></div>
-      <section class="history-panel" *ngIf="selectedServiceId">
+      <section id="service-history-panel" class="history-panel" *ngIf="selectedServiceId">
         <div class="service-toolbar"><h3>{{selectedService?.name || selectedServiceId}}</h3><button (click)="closeService()">Close details</button></div>
         <p class="service-note">{{selectedServiceId}} · {{selectedService ? health(selectedService) : 'Outside current window'}}</p>
         <div class="history-controls"><label>History <select #period (change)="historyMinutes = +period.value; loadHistory()"><option value="60" [selected]="historyMinutes === 60">1 hour</option><option value="360" [selected]="historyMinutes === 360">6 hours</option><option value="1440" [selected]="historyMinutes === 1440">24 hours</option></select></label>
