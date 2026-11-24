@@ -16,11 +16,13 @@
       <div *ngIf="p.platform==='WEB'"><span>Workflow failure events</span><strong>{{(p.workflowFailures | number:'1.0-0') ?? '—'}}</strong></div>
     </div>
     <div class="platform-footer"><span *ngIf="p.platform!=='WEB'">Home observed: {{(p.coverage | number:'1.0-1') ?? '—'}}<ng-container *ngIf="p.coverage != null">%</ng-container></span><span>{{p.assessment.evaluated}} checks · {{p.assessment.skipped}} skipped</span></div>
+    <div class="window-caption" *ngIf="p.bigQueryWindow as w">BigQuery {{w.windowStartUtc | date:'HH:mm'}} – {{w.windowEndUtc | date:'HH:mm'}}</div>
   </button>
   <button class="platform-card" type="button" (click)="platformSelected.emit('BACKEND')">
     <div class="platform-heading"><strong>Backend</strong><span class="state" [attr.data-tone]="backendTone">{{backendStatus}}</span><span class="arrow" aria-hidden="true">›</span></div>
     <div class="platform-metrics"><div><span>Services</span><strong>{{backendAvailable ? services.length : '—'}}</strong></div><div><span>With errors</span><strong>{{backendAvailable ? errorServices : '—'}}</strong></div><div><span>Critical</span><strong [class.critical-text]="backendAvailable && criticalServices>0">{{backendAvailable ? criticalServices : '—'}}</strong></div></div>
     <div class="platform-footer"><span>Dynatrace · 30 min</span><span>{{backendAvailable ? unknownServices+' limited/unknown' : 'No current assessment'}}</span></div>
+    <div class="window-caption" *ngIf="backendAvailable">{{serviceStart | date:'HH:mm'}} – {{serviceEnd | date:'HH:mm'}}</div>
   </button>
 </section>
 <div class="command-grid">
@@ -44,7 +46,7 @@
     <div class="table-scroll"><table><thead><tr><th>Platform</th><th>Active users</th><th>Sessions</th></tr></thead><tbody><tr *ngFor="let p of summaries;trackBy:trackPlatform"><td>{{p.name}}</td><td>{{(p.users | number:'1.0-0') ?? '—'}}</td><td>{{(p.sessions | number:'1.0-0') ?? '—'}}</td></tr></tbody></table></div>
     <p class="note">GA4 active users and BigQuery sessions use independent windows. No cross-platform unique-user total.</p>
     <h3>Payment events</h3>
-    <div class="table-scroll"><table><thead><tr><th>Platform</th><th>Initiated</th><th>Purchase</th><th>Failure</th></tr></thead><tbody><tr *ngFor="let p of summaries"><ng-container *ngIf="p.platform!=='WEB'"><td>{{p.name}}</td><td>{{(p.paymentInitiated | number:'1.0-0') ?? '—'}}</td><td>{{(p.purchases | number:'1.0-0') ?? '—'}}</td><td [class.critical-text]="(p.paymentFailures??0)>0">{{(p.paymentFailures | number:'1.0-0') ?? '—'}}</td></ng-container></tr></tbody></table></div>
+    <div class="table-scroll"><table><thead><tr><th>Platform</th><th>Initiated</th><th>Purchase</th><th>Failure</th></tr></thead><tbody><ng-container *ngFor="let p of summaries"><tr *ngIf="p.platform!=='WEB'"><td>{{p.name}}</td><td>{{(p.paymentInitiated | number:'1.0-0') ?? '—'}}</td><td>{{(p.purchases | number:'1.0-0') ?? '—'}}</td><td [class.critical-text]="(p.paymentFailures??0)>0">{{(p.paymentFailures | number:'1.0-0') ?? '—'}}</td></tr></ng-container></tbody></table></div>
     <p class="note">Android outcomes unavailable. Counts are events, not transaction success rates.</p>
   </section>
   <section class="panel trends">
