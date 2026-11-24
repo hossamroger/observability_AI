@@ -79,7 +79,7 @@ export class GlobalOverviewComponent implements OnChanges,OnDestroy {
     return {...DEFAULT_THRESHOLDS};
   }
   private sourceState(key:string,metric?:MetricObservation):string {
-    if(this.overviewError)return 'Collection failed';
+    if(this.overviewError)return 'Overview unavailable';
     const outcome=this.overview?.sourceOutcomes?.find(o=>o.sourceSystem===key);
     if(outcome?.status==='FAILED')return 'Collection failed';
     if(outcome?.status==='EMPTY')return 'No observations returned';
@@ -88,7 +88,7 @@ export class GlobalOverviewComponent implements OnChanges,OnDestroy {
     return fresh(metric.collectedAtUtc,key==='BIGQUERY'?600000:120000)?'Recently collected':'Stale';
   }
   private tone(state:string):string {
-    return state==='Collection failed'?'critical':state==='Recently collected'?'good':state==='No data'?'neutral':'warning';
+    return state==='Collection failed'||state==='Overview unavailable'?'critical':state==='Recently collected'?'good':state==='No data'?'neutral':'warning';
   }
   private rebuild():void {
     const data=this.overview?.metrics??[], now=Date.now(), thresholds=this.thresholds();
@@ -132,7 +132,7 @@ export class GlobalOverviewComponent implements OnChanges,OnDestroy {
     this.warningServices=this.services.filter(s=>s.health==='WARNING').length;
     this.unknownServices=this.services.filter(s=>s.health==='UNKNOWN'||s.health==='LOW TRAFFIC').length;
     this.errorServices=this.services.filter(s=>finite(s.failure)&&s.failure>0).length;
-    this.backendStatus=this.serviceError?'Window unavailable':!this.backendAvailable?'Awaiting fresh data':this.criticalServices?'Critical services':this.warningServices?'Warning services':this.unknownServices?'Limited assessment':'No rule breaches';
+    this.backendStatus=this.serviceError?'Window unavailable':!this.backendAvailable?'No fresh observations':this.criticalServices?'Critical services':this.warningServices?'Warning services':this.unknownServices?'Limited assessment':'No rule breaches';
     this.backendTone=!this.backendAvailable?'neutral':this.criticalServices?'critical':this.warningServices?'warning':'neutral';
     this.topServices=this.backendAvailable?this.services.filter(s=>finite(s.failed)&&s.failed>0)
       .sort((a,b)=>(b.failed??0)-(a.failed??0)||a.id.localeCompare(b.id)).slice(0,5):[];
