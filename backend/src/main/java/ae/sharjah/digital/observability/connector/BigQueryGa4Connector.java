@@ -11,8 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -101,13 +99,14 @@ public class BigQueryGa4Connector implements MonitoringConnector {
         try {
             validate();
             Instant end = Instant.now().minusSeconds(lag).truncatedTo(ChronoUnit.MINUTES);
-            ZonedDateTime date = end.minusNanos(1).atZone(zone);
-            Instant midnight = date.toLocalDate().atStartOfDay(zone).toInstant();
             Instant start = end.minusSeconds(1800);
-            if (start.isBefore(midnight)) start = midnight;
-            String table = project + "." + dataset + ".events_intraday_" + date.toLocalDate().format(DateTimeFormatter.BASIC_ISO_DATE);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(credentials().getAccessToken().getTokenValue());
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            List<String> tables = new BigQueryExportTableResolver(http, project, dataset)
+                    .resolve(start, end, zone, headers);
             ObjectNode request = json.createObjectNode();
-            request.put("query", sql(table));
+            request.put("query", sql(tables));
             request.put("useLegacySql", false);
             request.put("location", location);
             request.put("maximumBytesBilled", Long.toString(maximumBytes));
@@ -119,9 +118,6 @@ public class BigQueryGa4Connector implements MonitoringConnector {
                 .add(param("start", "TIMESTAMP", start.toString()))
                 .add(param("end", "TIMESTAMP", end.toString()))
                 .add(param("home_screen", "STRING", homeScreen));
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(credentials().getAccessToken().getTokenValue());
-            headers.setContentType(MediaType.APPLICATION_JSON);
             String response = http.postForObject("https://bigquery.googleapis.com/bigquery/v2/projects/" + project + "/queries",
                     new HttpEntity<>(request, headers), String.class);
             JsonNode root = awaitQueryResult(json.readTree(response), headers);
@@ -151,8 +147,8 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             BigQueryAggregateValidator.validate(observations);
             java.util.Set<String> reportedPlatforms = new java.util.HashSet<>();
             for (MetricObservation observation : observations) reportedPlatforms.add(observation.platform);
-            LOG.info("event=bigquery_ga4_aggregated observations={} bytes_processed={} window_start={} window_end={}",
-                    observations.size(), root.path("totalBytesProcessed").asText("unknown"), start, end);
+            LOG.info("event=bigquery_ga4_aggregated observations={} bytes_processed={} export_tables={} window_start={} window_end={}",
+                    observations.size(), root.path("totalBytesProcessed").asText("unknown"), tables.size(), start, end);
             return new CollectionBatch(sourceName(), observations, !observations.isEmpty() && reportedPlatforms.size() < 3);
         } catch (Exception failure) {
             throw new IllegalStateException("BigQuery GA4 collection failed", failure);
@@ -187,7 +183,19 @@ public class BigQueryGa4Connector implements MonitoringConnector {
     }
 
     static String sql(String table) {
-        return "WITH scoped AS (SELECT platform, event_name, user_pseudo_id, event_timestamp, app_info.version AS app_version, "
+        return sql(Collections.singletonList(table));
+    }
+
+    static String sql(List<String> tables) {
+        if (tables.isEmpty()) throw new IllegalArgumentException("At least one export table is required");
+        List<String> selections = new ArrayList<>();
+        for (String table : tables) selections.add(scopedSelect(table));
+        return "WITH scoped AS (" + String.join(" UNION ALL ", selections) + "), "
+            + aggregateSql();
+    }
+
+    private static String scopedSelect(String table) {
+        return "SELECT platform, event_name, user_pseudo_id, event_timestamp, app_info.version AS app_version, "
             + "(SELECT MAX(p.value.string_value) FROM UNNEST(event_params) p WHERE p.key='firebase_screen') screen_name, "
             + "(SELECT MAX(NULLIF(TRIM(p.value.string_value),'')) FROM UNNEST(event_params) p WHERE p.key='transaction_id') transaction_id, "
             + "(SELECT MAX(p.value.int_value) FROM UNNEST(event_params) p WHERE p.key='ga_session_id') session_id, "
@@ -195,13 +203,17 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             + "FROM `" + table + "` WHERE event_timestamp >= UNIX_MICROS(@start) AND event_timestamp < UNIX_MICROS(@end) "
             + "AND ((platform='WEB' AND stream_id=@web) OR (platform='ANDROID' AND stream_id=@android) OR (platform='IOS' AND stream_id=@ios)) "
             + "AND NOT EXISTS (SELECT 1 FROM UNNEST(event_params) p WHERE p.key IN ('environment','environment_std') "
-            + "AND p.value.string_value IS NOT NULL AND LOWER(TRIM(p.value.string_value)) NOT IN ('prd','production'))), "
-            + "a AS (SELECT platform, COUNT(*) events, COUNT(DISTINCT user_pseudo_id) observed_users, "
+            + "AND p.value.string_value IS NOT NULL AND LOWER(TRIM(p.value.string_value)) NOT IN ('prd','production'))";
+    }
+
+    private static String aggregateSql() {
+        return "a AS (SELECT platform, COUNT(*) events, COUNT(DISTINCT user_pseudo_id) observed_users, "
             + "COUNT(DISTINCT IF(user_pseudo_id IS NOT NULL AND session_id IS NOT NULL, CONCAT(user_pseudo_id,':',CAST(session_id AS STRING)),NULL)) observed_sessions, "
             + "COUNTIF(event_name='session_start') session_starts, COUNTIF(event_name='screen_view') screen_views, "
             + "COUNTIF(user_pseudo_id IS NULL OR session_id IS NULL) missing_session_key, "
             + "COUNTIF(event_name='session_start' AND (user_pseudo_id IS NULL OR session_id IS NULL)) missing_start_key, "
             + "COUNTIF(event_name IN ('payment_initiated','purchase') AND (user_pseudo_id IS NULL OR transaction_id IS NULL)) missing_payment_key, "
+            + "COUNTIF(event_name IN ('application_action','application_initiate_action')) workflow_total, "
             + "COUNTIF(event_name IN ('application_action','application_initiate_action') AND (action_result IS NULL OR action_result NOT IN ('success','failed'))) unclassified_workflow, "
             + "COUNTIF(event_name='page_view') page_views, COUNTIF(event_name='service_card_click') service_clicks, "
             + "COUNTIF(event_name='payment_initiated') payment_initiations, COUNTIF(event_name='purchase') purchase_events, "
@@ -215,7 +227,7 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             + "STRUCT('observed_events' AS metric_name, events AS metric_value), STRUCT('observed_users',observed_users), "
             + "STRUCT('observed_sessions',observed_sessions), STRUCT('session_start_events',session_starts), "
             + "STRUCT('quality_missing_session_key_events',missing_session_key), STRUCT('quality_missing_start_key_events',missing_start_key), "
-            + "STRUCT('quality_missing_payment_key_events',missing_payment_key), STRUCT('quality_unclassified_workflow_events',unclassified_workflow), "
+            + "STRUCT('quality_missing_payment_key_events',missing_payment_key), STRUCT('quality_unclassified_workflow_events',unclassified_workflow), STRUCT('workflow_total_events',workflow_total), "
             + "STRUCT('screen_view_events',screen_views), STRUCT('page_view_events',page_views), STRUCT('service_click_events',service_clicks), "
             + "STRUCT('payment_initiated_events',payment_initiations), STRUCT('purchase_events',purchase_events), "
             + "STRUCT('payment_failure_events',payment_failure_events), STRUCT('workflow_success_events',workflow_success_events), "
