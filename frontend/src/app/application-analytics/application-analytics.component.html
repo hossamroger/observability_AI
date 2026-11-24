@@ -4,7 +4,7 @@
       <span class="source-state" [class.stale]="freshness(source.window, source.key === 'GA4' ? 'GA4' : 'BIGQUERY') !== 'Recently collected'">{{freshness(source.window, source.key === 'GA4' ? 'GA4' : 'BIGQUERY')}}</span></div>
     <ng-container *ngIf="source.window as w; else noSource">
       <p>{{w.windowStartUtc | date:'MMM d, HH:mm:ss'}} – {{w.windowEndUtc | date:'MMM d, HH:mm:ss'}}</p>
-      <small>Collected {{w.collectedAtUtc | date:'MMM d, HH:mm:ss'}}</small>
+      <small>Window: {{(windowMinutes(w) | number:'1.0-1') ?? '—'}} min · Collected {{w.collectedAtUtc | date:'MMM d, HH:mm:ss'}}</small>
     </ng-container>
     <ng-template #noSource><p>No observations available</p></ng-template>
     <small *ngIf="outcome(source.key) as result">Latest attempt {{result.executedAtUtc | date:'MMM d, HH:mm:ss'}} · {{result.status}}<ng-container *ngIf="result.errorCategory"> · {{result.errorCategory}}</ng-container></small>
@@ -80,6 +80,7 @@
     <p class="service-note">Matched initiation and purchase for the same pseudonymous user and transaction within the window. GA4 event timing, not payment gateway latency. Unmatched events are not failed transactions.</p>
   </ng-container>
   <p class="service-note" *ngIf="selectedPlatform === 'ANDROID'">Payment completion and failure correlation is not established for Android.</p>
+  <p class="service-note" *ngIf="selectedPlatform === 'WEB' && qualityValue('workflow_total_events') === 0">No application action or initiation events were observed in this window.</p>
   <p class="service-note">Event counts are not unique transactions or success rates.</p>
 </section>
 <details class="service-panel technical">
