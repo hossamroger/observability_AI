@@ -111,33 +111,7 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             if (!start.isBefore(end) || end.isAfter(latestAvailableEnd())
                     || java.time.Duration.between(start, end).compareTo(java.time.Duration.ofDays(7)) > 0)
                 throw new IllegalArgumentException("Unsupported BigQuery reporting window");
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(credentials().getAccessToken().getTokenValue());
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            List<String> tables = new BigQueryExportTableResolver(http, project, dataset)
-                    .resolve(start, end, zone, headers);
-            ObjectNode request = json.createObjectNode();
-            request.put("query", sql(tables));
-            request.put("useLegacySql", false);
-            request.put("location", location);
-            request.put("maximumBytesBilled", Long.toString(maximumBytes));
-            request.put("timeoutMs", 10000);
-            request.put("parameterMode", "NAMED");
-            request.putArray("queryParameters")
-                .add(param("web", "STRING", web)).add(param("android", "STRING", android))
-                .add(param("ios", "STRING", ios))
-                .add(param("start", "TIMESTAMP", start.toString()))
-                .add(param("end", "TIMESTAMP", end.toString()))
-                .add(param("home_screen", "STRING", homeScreen));
-            String response = http.postForObject("https://bigquery.googleapis.com/bigquery/v2/projects/" + project + "/queries",
-                    new HttpEntity<>(request, headers), String.class);
-            JsonNode root = awaitQueryResult(json.readTree(response), headers);
-            if (root.path("errors").size() > 0)
-                throw new BigQueryCollectionException(BigQueryCollectionException.Category.QUERY_ERRORS);
-            if (!root.path("jobComplete").asBoolean())
-                throw new BigQueryCollectionException(BigQueryCollectionException.Category.QUERY_PENDING);
-            if (root.hasNonNull("pageToken"))
-                throw new BigQueryCollectionException(BigQueryCollectionException.Category.PAGINATED_RESULT);
+            JsonNode root = executeQuery(start, end, 0);
             List<MetricObservation> observations = new ArrayList<>();
             for (JsonNode row : root.path("rows")) {
                 JsonNode fields = row.path("f");
@@ -158,12 +132,78 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             BigQueryAggregateValidator.validate(observations);
             java.util.Set<String> reportedPlatforms = new java.util.HashSet<>();
             for (MetricObservation observation : observations) reportedPlatforms.add(observation.platform);
-            LOG.info("event=bigquery_ga4_aggregated observations={} bytes_processed={} export_tables={} window_start={} window_end={}",
-                    observations.size(), root.path("totalBytesProcessed").asText("unknown"), tables.size(), start, end);
+            LOG.info("event=bigquery_ga4_aggregated observations={} bytes_processed={} window_start={} window_end={}",
+                    observations.size(), root.path("totalBytesProcessed").asText("unknown"), start, end);
             return new CollectionBatch(sourceName(), observations, !observations.isEmpty() && reportedPlatforms.size() < 3);
         } catch (Exception failure) {
             throw new IllegalStateException("BigQuery GA4 collection failed", failure);
         }
+    }
+
+    /** Historical buckets are event-time intervals, not sums of rolling snapshots. */
+    public synchronized CollectionBatch collectHistory(Instant start, Instant end, int bucketSeconds) {
+        try {
+            validate();
+            long seconds = java.time.Duration.between(start, end).getSeconds();
+            if (seconds <= 0 || seconds > 86400 || end.isAfter(latestAvailableEnd())
+                    || (bucketSeconds != 300 && bucketSeconds != 900 && bucketSeconds != 3600)
+                    || seconds % bucketSeconds != 0 || seconds / bucketSeconds > 96)
+                throw new IllegalArgumentException("Invalid history window");
+            JsonNode root = executeQuery(start, end, bucketSeconds);
+            List<MetricObservation> observations = new ArrayList<>();
+            java.util.Set<String> unique = new java.util.HashSet<>();
+            for (JsonNode row : root.path("rows")) {
+                JsonNode fields = row.path("f");
+                String platform = fields.path(0).path("v").asText();
+                String metric = fields.path(1).path("v").asText();
+                double value = Double.parseDouble(fields.path(2).path("v").asText());
+                long bucket = Long.parseLong(fields.path(3).path("v").asText());
+                if (!platform.matches("WEB|ANDROID|IOS") || !BigQueryHistorySql.METRICS.contains(metric)
+                        || !Double.isFinite(value) || value < 0 || (!metric.endsWith("_ms") && value != Math.floor(value))
+                        || bucket < 0 || bucket >= seconds / bucketSeconds || !unique.add(platform+"|"+metric+"|"+bucket))
+                    throw new BigQueryCollectionException(BigQueryCollectionException.Category.INVALID_RESULT);
+                Instant bucketStart = start.plusSeconds(bucket * bucketSeconds);
+                observations.add(new MetricObservation(sourceName(), platform, "GA4_HISTORY", metric, value,
+                        BigQueryPerformanceSql.metricUnit(metric), bucketStart, bucketStart.plusSeconds(bucketSeconds), false));
+            }
+            LOG.info("event=bigquery_ga4_history observations={} bytes_processed={} window_start={} window_end={} bucket_seconds={}",
+                    observations.size(), root.path("totalBytesProcessed").asText("unknown"), start, end, bucketSeconds);
+            return new CollectionBatch(sourceName(), observations);
+        } catch (Exception failure) {
+            throw new IllegalStateException("BigQuery history collection failed", failure);
+        }
+    }
+
+    private JsonNode executeQuery(Instant start, Instant end, int bucketSeconds) throws Exception {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(credentials().getAccessToken().getTokenValue());
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        List<String> tables = new BigQueryExportTableResolver(http, project, dataset)
+                .resolve(start, end, zone, headers);
+        ObjectNode request = json.createObjectNode();
+        request.put("query", bucketSeconds == 0 ? sql(tables) : historySql(tables));
+        request.put("useLegacySql", false);
+        request.put("location", location);
+        request.put("maximumBytesBilled", Long.toString(maximumBytes));
+        request.put("timeoutMs", 10000);
+        request.put("parameterMode", "NAMED");
+        request.putArray("queryParameters")
+            .add(param("web", "STRING", web)).add(param("android", "STRING", android))
+            .add(param("ios", "STRING", ios))
+            .add(param("start", "TIMESTAMP", start.toString()))
+            .add(param("end", "TIMESTAMP", end.toString()))
+            .add(param("home_screen", "STRING", homeScreen));
+        if (bucketSeconds > 0) request.withArray("queryParameters").add(param("bucket_us", "INT64", Long.toString(bucketSeconds * 1000000L)));
+        String response = http.postForObject("https://bigquery.googleapis.com/bigquery/v2/projects/" + project + "/queries",
+                new HttpEntity<>(request, headers), String.class);
+        JsonNode root = awaitQueryResult(json.readTree(response), headers);
+        if (root.path("errors").size() > 0)
+            throw new BigQueryCollectionException(BigQueryCollectionException.Category.QUERY_ERRORS);
+        if (!root.path("jobComplete").asBoolean())
+            throw new BigQueryCollectionException(BigQueryCollectionException.Category.QUERY_PENDING);
+        if (root.hasNonNull("pageToken"))
+            throw new BigQueryCollectionException(BigQueryCollectionException.Category.PAGINATED_RESULT);
+        return root;
     }
 
     /** Poll the same query job, never resubmit a potentially billable query. */
@@ -198,11 +238,18 @@ public class BigQueryGa4Connector implements MonitoringConnector {
     }
 
     static String sql(List<String> tables) {
+        return scopedSql(tables) + ", " + aggregateSql();
+    }
+
+    static String historySql(List<String> tables) {
+        return scopedSql(tables) + BigQueryHistorySql.appendMetrics();
+    }
+
+    private static String scopedSql(List<String> tables) {
         if (tables.isEmpty()) throw new IllegalArgumentException("At least one export table is required");
         List<String> selections = new ArrayList<>();
         for (String table : tables) selections.add(scopedSelect(table));
-        return "WITH scoped AS (" + String.join(" UNION ALL ", selections) + "), "
-            + aggregateSql();
+        return "WITH scoped AS (" + String.join(" UNION ALL ", selections) + ")";
     }
 
     private static String scopedSelect(String table) {

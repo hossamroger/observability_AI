@@ -103,23 +103,36 @@
   <p class="service-note">Event counts are not unique transactions or success rates.</p>
 </section>
 <section class="service-panel">
-  <div class="section-heading"><h2>Historical trends</h2><small>Stored observations · no new BigQuery query</small></div>
+  <div class="section-heading"><h2>Historical trends</h2><small>{{historySource === 'bigquery' ? 'BigQuery export history' : 'Stored rolling observations'}}</small></div>
   <div class="range-controls">
-    <label>Metric <select #historySelect [value]="historyMetric" (change)="historyMetric = historySelect.value; historyRows = []; historyLoaded = false; historySubscriptionReset()"><option *ngFor="let option of historyOptions" [value]="option.key">{{option.label}}</option></select></label>
-    <label>Period <select #historyPeriodSelect [value]="historyPeriod" (change)="historyPeriod = +historyPeriodSelect.value; historyRows = []; historyLoaded = false; historySubscriptionReset()"><option value="60">1 hour</option><option value="360">6 hours</option><option value="1440">24 hours</option></select></label>
-    <button type="button" [disabled]="historyLoading" (click)="loadHistory()">Load trend</button>
+    <label>Source <select [ngModel]="historySource" (ngModelChange)="changeHistorySource($event)" [disabled]="historyLoading">
+      <option value="bigquery">BigQuery history</option><option value="stored">Stored snapshots</option>
+    </select></label>
+    <label>Metric <select [ngModel]="historyMetric" (ngModelChange)="changeHistoryMetric($event)" [disabled]="historyLoading"><option *ngFor="let option of historyOptions; trackBy: trackHistoryOption" [ngValue]="option.key">{{option.label}}</option></select></label>
+    <label>Period <select [ngModel]="historyPeriod" (ngModelChange)="changeHistoryPeriod($event)" [disabled]="historyLoading">
+      <option [ngValue]="60">1 hour</option><option [ngValue]="360">6 hours</option><option [ngValue]="1440">24 hours</option>
+    </select></label>
+    <button type="button" [disabled]="historyLoading" (click)="loadHistory()">{{historyLoading ? 'Loading…' : 'Load trend'}}</button>
   </div>
-  <p class="service-note">Each point is a separately collected rolling-window snapshot. Counts overlap and must not be summed; percentiles are not averaged. Missing intervals are not interpolated. Local in-memory data is lost on restart.</p>
-  <p *ngIf="historyLoading">Loading stored history…</p><p class="negative" *ngIf="historyError">{{historyError}}</p>
-  <p *ngIf="historyLoaded && !historyLoading && !historyError && !historyRows.length">No stored observations for the selected metric and period.</p>
+  <p class="service-note" *ngIf="historySource === 'bigquery'">One on-demand query for all supported metrics and platforms. Each point represents its own time bucket, not a rolling snapshot. Sessions can occur in more than one bucket; do not sum them as unique sessions. Startup percentiles use eligible session starts and matched screen events; the final 5 minutes cannot complete the required follow-up. Missing buckets are not filled with zero.</p>
+  <p class="service-note" *ngIf="historySource === 'stored'">Each point is a separately collected rolling-window snapshot. Counts overlap and must not be summed; percentiles are not averaged. Missing intervals are not interpolated. The new default local database persists across restarts; previous in-memory observations cannot be recovered.</p>
+  <p *ngIf="historyLoading">Loading {{historySource === 'bigquery' ? 'BigQuery' : 'stored'}} history…</p><p class="negative" role="alert" *ngIf="historyError">{{historyError}}</p>
+  <p *ngIf="historyLoaded && !historyLoading && !historyError && !historyRows.length">No observations for the selected metric and period.</p>
   <ng-container *ngIf="historyPoints.length">
-    <svg class="trend-chart" viewBox="0 0 780 205" role="img" aria-label="Historical metric observation trend">
+    <p class="service-note"><strong>{{historyLabel}}</strong> · {{historyStart | date:'medium'}} – {{historyEnd | date:'medium'}}<ng-container *ngIf="historyReport?.bucketSeconds as bucket"> · {{bucket/60}}-minute buckets</ng-container></p>
+    <div class="history-single" *ngIf="historyPoints.length === 1">
+      <strong>{{historyPoints[0].value | number:'1.0-2'}}</strong>
+      <span>{{historyPoints[0].time | date:'medium'}}</span>
+      <small>Only one observation is available; a trend requires at least two points.</small>
+    </div>
+    <svg *ngIf="historyPoints.length > 1" class="trend-chart" viewBox="0 0 780 205" role="img" [attr.aria-label]="historyLabel + ' historical trend'">
       <line x1="44" y1="175" x2="744" y2="175" stroke="#94a3b8"/><line x1="44" y1="30" x2="44" y2="175" stroke="#94a3b8"/>
       <text x="44" y="21" font-size="11">{{historyMax | number:'1.0-2'}}</text><text x="28" y="175" font-size="11">0</text>
-      <svg:circle *ngFor="let point of historyPoints" [attr.cx]="point.x" [attr.cy]="point.y" r="3" fill="#2672e8"><svg:title>{{point.time | date:'medium'}}: {{point.value | number:'1.0-2'}}</svg:title></svg:circle>
-      <text x="44" y="195" font-size="11">Earlier</text><text x="744" y="195" text-anchor="end" font-size="11">Request time</text>
+      <svg:line *ngFor="let segment of historySegments" [attr.x1]="segment.x1" [attr.y1]="segment.y1" [attr.x2]="segment.x2" [attr.y2]="segment.y2" stroke="#2672e8" stroke-width="1.5"/>
+      <svg:circle *ngFor="let point of historyPoints" [attr.cx]="point.x" [attr.cy]="point.y" r="3" fill="#2672e8"><svg:title>{{point.from | date:'medium'}} – {{point.time | date:'medium'}}: {{point.value | number:'1.0-2'}}</svg:title></svg:circle>
+      <svg:text *ngFor="let tick of historyTicks; let i = index" [attr.x]="44+175*i" y="195" text-anchor="middle" font-size="10">{{tick | date:'HH:mm'}}</svg:text>
     </svg>
-    <p class="service-note">{{historyRows.length}} observations · Latest {{historyRows[historyRows.length-1].windowEndUtc | date:'medium'}}</p>
+    <p class="service-note">{{historyPoints.length}} observations · Latest {{historyRows[historyRows.length-1].windowEndUtc | date:'medium'}}</p>
   </ng-container>
 </section>
 <details class="service-panel technical">

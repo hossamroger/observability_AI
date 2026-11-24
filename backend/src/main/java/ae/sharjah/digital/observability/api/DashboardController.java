@@ -74,6 +74,12 @@ public class DashboardController {
         return applicationRanges.report(minutes, from, to);
     }
 
+    @org.springframework.web.bind.annotation.PostMapping("/application-source-history")
+    public Map<String, Object> applicationSourceHistory(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="360") int minutes) {
+        return applicationRanges.history(minutes);
+    }
+
     @GetMapping("/application-history")
     public List<MetricObservation> applicationHistory(
             @org.springframework.web.bind.annotation.RequestParam String platform,
