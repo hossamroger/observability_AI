@@ -68,7 +68,17 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
     this.insightDraft={...DEFAULT_THRESHOLDS};
     this.saveInsightThresholds();
   }
-  trackFinding(index:number, finding:Finding):string { return finding.id; }
+  trackFinding(index:number, finding:Finding):string { return this.selectedPlatform+'|'+finding.id; }
+  findingCount(assessment:InsightResult, severity:Finding['severity']):number {
+    return assessment.findings.filter(finding=>finding.severity===severity).length;
+  }
+  get sourceContexts():{name:string;key:'GA4'|'BIGQUERY';window:MetricObservation|undefined;state:string}[] {
+    const sources:{name:string;key:'GA4'|'BIGQUERY';window:MetricObservation|undefined}[] = [
+      {name:'GA4 Realtime',key:'GA4',window:this.realtimeWindow},
+      {name:'BigQuery',key:'BIGQUERY',window:this.bigQueryWindow}
+    ];
+    return sources.map(source=>({...source,state:this.freshness(source.window,source.key)}));
+  }
   get insightResult():InsightResult {
     return evaluateInsights({platform:this.selectedPlatform,metrics:this.selectedMetrics,
       sourceState:this.freshness(this.bigQueryWindow,'BIGQUERY'),historical:!!this.rangeReport,
