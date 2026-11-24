@@ -53,3 +53,5 @@ tr:last-child td{border:0}.service-name{min-width:120px;max-width:220px;overflow
 @media(max-width:1200px){.platform-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.source-strip{grid-template-columns:repeat(4,minmax(0,1fr))}.strip-title{grid-column:1/-1;padding-bottom:9px}.source-item:nth-child(2){border-left:0}}
 @media(max-width:900px){.command-grid{grid-template-columns:1fr}.source-strip{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.source-item:nth-child(even){border-left:0}}
 @media(max-width:560px){.platform-grid,.source-strip{grid-template-columns:1fr}.source-item{border-left:0;border-top:1px solid var(--border)}.panel{padding:12px}.finding{grid-template-columns:21px minmax(0,1fr)}.finding .text-link{grid-column:2}.platform-metrics strong{font-size:24px}}
+
+.window-caption{margin-top:6px;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
