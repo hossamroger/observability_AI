@@ -102,7 +102,7 @@ public class DynatraceMetricConnector implements MonitoringConnector {
         if (successful < metricSelectors.size()) {
             LOG.warn("event=dynatrace_partial_collection successful={} total={}", successful, metricSelectors.size());
         }
-        return new CollectionBatch(sourceName(), observations);
+        return new CollectionBatch(sourceName(), observations, successful < metricSelectors.size());
     }
 
     private final java.util.Map<Integer, List<MetricObservation>> windowCache = new java.util.HashMap<>();
