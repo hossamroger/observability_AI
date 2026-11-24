@@ -21,6 +21,8 @@ public class DashboardController {
     private final LiveUpdatePublisher updates;
     private final ae.sharjah.digital.observability.persistence.CollectionExecutionLogRepository executionLogs;
     private final boolean demoMode;
+    @org.springframework.beans.factory.annotation.Autowired
+    private ae.sharjah.digital.observability.service.ApplicationRangeService applicationRanges;
 
     public DashboardController(MetricSnapshotRepository snapshots,
             LiveUpdatePublisher updates,
@@ -62,6 +64,28 @@ public class DashboardController {
         response.put("metrics", metrics);
         response.put("sourceOutcomes", demoMode ? java.util.Collections.emptyList() : executionLogs.findLatestSourceOutcomes());
         return response;
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/application-range")
+    public Map<String, Object> applicationRange(
+            @org.springframework.web.bind.annotation.RequestParam(required=false) Integer minutes,
+            @org.springframework.web.bind.annotation.RequestParam(required=false) String from,
+            @org.springframework.web.bind.annotation.RequestParam(required=false) String to) {
+        return applicationRanges.report(minutes, from, to);
+    }
+
+    @GetMapping("/application-history")
+    public List<MetricObservation> applicationHistory(
+            @org.springframework.web.bind.annotation.RequestParam String platform,
+            @org.springframework.web.bind.annotation.RequestParam String metric,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="360") int minutes) {
+        if (!platform.matches("WEB|ANDROID|IOS") || !java.util.Arrays.asList(60, 360, 1440).contains(minutes)
+                || !java.util.Arrays.asList("observed_sessions", "observed_events", "session_to_home_p95_ms",
+                    "session_to_first_screen_p95_ms", "session_to_home_samples", "session_start_eligible_sessions",
+                    "payment_initiated_events", "purchase_events", "payment_failure_events", "workflow_total_events").contains(metric))
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST);
+        Instant end = Instant.now();
+        return snapshots.findApplicationHistory(platform, metric, end.minusSeconds(minutes * 60L), end, demoMode);
     }
 
     @GetMapping(value="/stream", produces=MediaType.TEXT_EVENT_STREAM_VALUE)

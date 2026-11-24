@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { DashboardOverview } from './metric.model';
+import { DashboardOverview, ApplicationRange, MetricObservation } from './metric.model';
 
 @Injectable({ providedIn: 'root' })
 export class DashboardService {
@@ -18,6 +18,14 @@ export class DashboardService {
 
   loadServiceHistory(serviceId: string, minutes: number): Observable<import('./metric.model').MetricObservation[]> {
     return this.http.get<import('./metric.model').MetricObservation[]>(`${this.apiPath}/service-history`, {params: {serviceId, minutes}});
+  }
+
+  loadApplicationRange(params: Record<string,string>): Observable<ApplicationRange> {
+    return this.http.post<ApplicationRange>(`${this.apiPath}/application-range`, null, {params});
+  }
+
+  loadApplicationHistory(platform: string, metric: string, minutes: number): Observable<MetricObservation[]> {
+    return this.http.get<MetricObservation[]>(`${this.apiPath}/application-history`, {params: {platform,metric,minutes}});
   }
 
   observeChanges(onChange: () => void): EventSource {

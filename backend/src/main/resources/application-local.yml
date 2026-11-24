@@ -16,6 +16,8 @@ spring:
       mode: always
       schema-locations: classpath:db/schema-h2.sql
 monitoring:
+  bigquery:
+    on-demand-enabled: true
   collector:
     enabled: true
   demo:
