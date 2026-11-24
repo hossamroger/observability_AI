@@ -33,6 +33,7 @@ export class AppComponent implements OnInit, OnDestroy {
   windowMetrics: MetricObservation[] = [];
   windowError = '';
   windowLoading = false;
+  get serviceSummaryAvailable(): boolean { return !this.windowError && (!this.windowLoading || this.windowMetrics.length > 0); }
   private windowRequest = 0;
   private overviewSubscription?: import('rxjs').Subscription;
   private windowSubscription?: import('rxjs').Subscription;
@@ -40,7 +41,7 @@ export class AppComponent implements OnInit, OnDestroy {
   get windowEnd(): string | undefined { return this.windowMetrics[0]?.windowEndUtc; }
   selectWindow(minutes: number): void {
     this.windowRequest++; this.windowSubscription?.unsubscribe(); this.windowLoading = false;
-    this.windowMinutes = minutes; this.page = 0; this.windowMetrics = [];
+    this.windowMinutes = minutes; this.page = 0; this.windowMetrics = []; this.windowError = '';
     this.refreshWindow();
   }
   private refreshWindow(): void {
@@ -174,6 +175,7 @@ export class AppComponent implements OnInit, OnDestroy {
   get servicesWithErrors(): number { return this.serviceRows.filter(r => (r.metrics.failure?.metricValue ?? 0) > 0).length; }
   get backendOtherMetrics(): MetricObservation[] { return this.selectedMetrics.filter(m => m.sourceSystem !== 'DYNATRACE'); }
   setSearch(value: string): void { this.search = value; this.page = 0; }
+  clearServiceFilters(): void { this.search = ''; this.healthFilter = 'ALL'; this.page = 0; }
   setSort(key: ServiceMetric | 'name'): void {
     this.descending = this.sortBy === key ? !this.descending : key !== 'name';
     this.sortBy = key; this.page = 0;

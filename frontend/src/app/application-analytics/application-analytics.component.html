@@ -1,36 +1,42 @@
-<div class="context-bar">
-<section class="analytics-sources" aria-label="Data sources">
-  <div *ngFor="let source of [{name:'GA4 Realtime',key:'GA4',window:realtimeWindow},{name:'BigQuery',key:'BIGQUERY',window:bigQueryWindow}]">
-    <div class="source-header"><strong>{{source.name}}</strong>
-      <span class="source-state" [class.stale]="!['Recently collected','On-demand report'].includes(freshness(source.window, source.key === 'GA4' ? 'GA4' : 'BIGQUERY'))">{{freshness(source.window, source.key === 'GA4' ? 'GA4' : 'BIGQUERY')}}</span></div>
-    <ng-container *ngIf="source.window as w; else noSource">
-      <p>{{w.windowStartUtc | date:'MMM d, HH:mm:ss'}} – {{w.windowEndUtc | date:'MMM d, HH:mm:ss'}}</p>
-      <small>Window: {{(windowMinutes(w) | number:'1.0-1') ?? '—'}} min · Collected {{w.collectedAtUtc | date:'MMM d, HH:mm:ss'}}</small>
-    </ng-container>
-    <ng-template #noSource><p>No observations available</p></ng-template>
-    <small *ngIf="outcome(source.key) as result">Latest attempt {{result.executedAtUtc | date:'MMM d, HH:mm:ss'}} · {{result.status}}<ng-container *ngIf="result.errorCategory"> · {{result.errorCategory}}</ng-container></small>
-  </div>
-</section>
-<details class="metric-help source-help"><summary>About source coverage</summary><p>GA4 and BigQuery use different windows and user definitions. Collection freshness does not guarantee complete telemetry.</p></details>
-<section class="report-toolbar" aria-label="Reporting period">
-  <div class="section-heading"><h2>Reporting window</h2><small>GA4 Realtime remains live</small></div>
-  <div class="range-controls">
-    <label>Reporting period <select [ngModel]="rangeChoice" (ngModelChange)="selectRange($event)" [disabled]="rangeLoading">
-      <option value="live">Live rolling 30 minutes</option><option value="5">Last 5 minutes</option><option value="15">Last 15 minutes</option>
-      <option value="30">Last 30 minutes</option><option value="60">Last hour</option><option value="360">Last 6 hours</option>
-      <option value="1440">Last 24 hours</option><option value="10080">Last 7 days</option><option value="custom">Custom range</option>
-    </select></label>
-    <ng-container *ngIf="rangeChoice === 'custom'">
-      <label>From (local time) <input type="datetime-local" #from [value]="customFrom" (input)="customFrom = from.value"></label>
-      <label>To (local time) <input type="datetime-local" #to [value]="customTo" (input)="customTo = to.value"></label>
-    </ng-container>
-    <button type="button" [disabled]="rangeChoice === 'live' || rangeLoading" (click)="applyRange()">{{rangeLoading ? 'Loading report…' : 'Apply'}}</button>
-  </div>
-  <p class="service-note" *ngIf="rangeReport">Displayed report: {{rangeReport.windowStartUtc | date:'medium'}} – {{rangeReport.windowEndUtc | date:'medium'}}. Generated {{rangeReport.generatedAtUtc | date:'medium'}}. It will not refresh automatically.</p>
-  <p class="service-note" *ngIf="!rangeReport">Displaying scheduled live observations until a requested report succeeds.</p>
-  <details class="metric-help"><summary>Reporting rules</summary><p>Relative windows end at a 5-minute boundary after the source delay. Long queries may exceed the byte limit. A 5-minute window has no eligible startup cohort because startup requires a 5-minute follow-up.</p></details>
-  <p class="negative" role="alert" *ngIf="rangeError">{{rangeError}} Previous displayed data is unchanged.</p>
-</section>
+<div class="context-bar compact-context">
+  <section class="analytics-sources" aria-label="Data sources">
+    <div *ngFor="let source of sourceContexts; trackBy: trackSource" class="source-tile">
+      <div class="source-header"><strong>{{source.name}}</strong><span class="source-state" [attr.data-state]="source.state">{{source.state}}</span></div>
+      <ng-container *ngIf="source.window as w; else noSource">
+        <p>{{w.windowStartUtc | date:'MMM d, HH:mm'}} – {{w.windowEndUtc | date:'MMM d, HH:mm'}}</p>
+        <small>Collected {{w.collectedAtUtc | date:'HH:mm:ss'}}</small>
+      </ng-container>
+      <ng-template #noSource><small>No observations for this platform</small></ng-template>
+    </div>
+  </section>
+  <section class="report-toolbar" aria-label="Reporting period">
+    <div class="range-controls">
+      <label>Reporting window <select [ngModel]="rangeChoice" (ngModelChange)="selectRange($event)" [disabled]="rangeLoading">
+        <option value="live">Live · 30 minutes</option><option value="5">Last 5 minutes</option><option value="15">Last 15 minutes</option>
+        <option value="30">Last 30 minutes</option><option value="60">Last hour</option><option value="360">Last 6 hours</option>
+        <option value="1440">Last 24 hours</option><option value="10080">Last 7 days</option><option value="custom">Custom range</option>
+      </select></label>
+      <ng-container *ngIf="rangeChoice === 'custom'">
+        <label>From (local time) <input type="datetime-local" #from [value]="customFrom" (input)="customFrom = from.value"></label>
+        <label>To (local time) <input type="datetime-local" #to [value]="customTo" (input)="customTo = to.value"></label>
+      </ng-container>
+      <button *ngIf="rangeChoice !== 'live'" type="button" [disabled]="rangeLoading" (click)="applyRange()">{{rangeLoading ? 'Loading…' : 'Apply'}}</button>
+    </div>
+    <small class="report-caption">{{rangeReport ? 'Historical report · fixed window' : 'Scheduled live observations'}} · GA4 Realtime stays live</small>
+    <p class="service-note" *ngIf="rangeReport">Report: {{rangeReport.windowStartUtc | date:'MMM d, HH:mm'}} – {{rangeReport.windowEndUtc | date:'MMM d, HH:mm'}}.</p>
+    <p class="service-note" *ngIf="rangeChoice !== 'live' && !rangeReport">Live data remains visible until the requested report succeeds.</p>
+    <p class="negative" role="alert" *ngIf="rangeError">{{rangeError}} Previous displayed data is unchanged.</p>
+  </section>
+  <details class="metric-help source-help"><summary>Source details &amp; reporting rules</summary>
+    <div class="source-detail-grid">
+      <div *ngFor="let source of sourceContexts; trackBy: trackSource"><strong>{{source.name}}</strong>
+        <ng-container *ngIf="source.window as w"><p>Window: {{w.windowStartUtc | date:'medium'}} – {{w.windowEndUtc | date:'medium'}} ({{(windowMinutes(w) | number:'1.0-1') ?? '—'}} min)<br>Collected: {{w.collectedAtUtc | date:'medium'}}</p></ng-container>
+        <p *ngIf="outcome(source.key) as result">Latest attempt: {{result.executedAtUtc | date:'medium'}} · {{result.status}}<ng-container *ngIf="result.errorCategory"> · {{result.errorCategory}}</ng-container></p>
+      </div>
+    </div>
+    <p>GA4 and BigQuery use different windows and user definitions. Recent collection does not guarantee complete telemetry. Relative reports end at a five-minute boundary after the source delay. Long queries may exceed the byte limit; five-minute reports have no eligible startup cohort.</p>
+    <p *ngIf="rangeReport">Report generated {{rangeReport.generatedAtUtc | date:'medium'}}; it does not refresh automatically.</p>
+  </details>
 </div>
 <nav class="section-nav" aria-label="Application analytics sections">
   <button type="button" *ngFor="let section of sections" [class.active]="activeSection === section.key" [attr.aria-pressed]="activeSection === section.key" (click)="selectSection(section.key)">{{section.label}}</button>
@@ -38,10 +44,15 @@
 <section class="service-panel insights-panel" [hidden]="activeSection !== 'overview'" *ngIf="insightResult as assessment">
   <div class="section-heading">
     <h2><svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Reliability insights</h2>
-    <small>{{rangeReport ? 'Selected report · not live' : 'Selected live window'}} · BigQuery · Rule-based assessment</small>
+    <small>{{rangeReport ? 'Historical · fixed window' : 'Live window'}} · BigQuery</small>
   </div>
   <div class="assessment-summary">
-    <span *ngIf="!assessment.blocked">{{assessment.evaluated}} checks evaluated · {{assessment.skipped}} skipped</span>
+    <div class="finding-counts" *ngIf="!assessment.blocked">
+      <span class="count-critical">{{findingCount(assessment, 'critical')}} critical</span>
+      <span class="count-warning">{{findingCount(assessment, 'warning')}} warning</span>
+      <span>{{findingCount(assessment, 'info')}} info</span>
+      <span class="check-count">{{assessment.evaluated}} evaluated · {{assessment.skipped}} skipped</span>
+    </div>
     <span *ngIf="assessment.blocked">Assessment unavailable</span>
     <span *ngIf="bigQueryWindow as w">{{w.windowStartUtc | date:'MMM d, HH:mm'}} – {{w.windowEndUtc | date:'MMM d, HH:mm'}}</span>
   </div>
@@ -49,13 +60,15 @@
     <article class="insight-row" *ngFor="let finding of assessment.findings; trackBy: trackFinding" [attr.data-severity]="finding.severity">
       <span class="insight-symbol" aria-hidden="true">{{finding.severity === 'info' ? 'i' : '!'}}</span>
       <div class="insight-content"><div class="insight-title"><strong>{{finding.title}}</strong><span class="insight-level">{{finding.severity}}</span></div>
-        <p>{{finding.evidence}}</p><p class="insight-action">{{finding.action}}</p></div>
+        <p class="insight-evidence">{{finding.evidence}}</p>
+        <details class="finding-details"><summary>Recommended action</summary><p class="insight-action">{{finding.action}}</p></details>
+      </div>
       <button class="insight-link" type="button" *ngIf="finding.section !== 'overview'" (click)="selectSection(finding.section)">View details <span aria-hidden="true">→</span></button>
     </article>
   </div>
   <p class="assessment-empty" *ngIf="!assessment.blocked && !assessment.findings.length">{{assessment.evaluated ? 'No configured threshold breaches or telemetry findings in evaluated checks.' : 'Insufficient observations for assessment.'}} This does not establish overall application health.</p>
   <details class="insight-settings">
-    <summary>Assessment thresholds</summary>
+    <summary>Configure assessment thresholds</summary>
     <p class="service-note">Provisional operating thresholds, not approved SLOs. Coverage uses eligible sessions; latency and slow shares use matched sessions. Version comparison uses the two highest numeric version labels in the same window, not verified release chronology. These checks do not establish causation or detect historical anomalies.</p>
     <div class="threshold-grid">
       <label *ngFor="let field of insightFields">{{field.label}}<input type="number" [step]="field.step" min="0" [(ngModel)]="insightDraft[field.key]"></label>
@@ -82,12 +95,12 @@
     </div>
   </div>
   <ng-container *ngIf="selectedPlatform === 'IOS'">
-    <h3>Matched payment duration</h3>
+    <details class="payment-duration"><summary>Matched payment duration</summary>
     <div class="table-scroll"><table class="service-table">
       <thead><tr><th *ngFor="let col of durationColumns">{{col.label}}</th></tr></thead>
       <tbody><tr><td *ngFor="let col of durationColumns"><ng-container *ngIf="performanceMetric('payment_to_purchase_' + col.key) as m; else missingPayment">{{displayValue(m) | number:'1.0-2'}}</ng-container><ng-template #missingPayment>—</ng-template></td></tr></tbody>
     </table></div>
-    <p class="service-note">Matched initiation and purchase for the same pseudonymous user and transaction within the window. GA4 event timing, not payment gateway latency. Unmatched events are not failed transactions.</p>
+    <p class="service-note">Matched initiation and purchase for the same pseudonymous user and transaction within the window. GA4 event timing, not payment gateway latency. Unmatched events are not failed transactions.</p></details>
   </ng-container>
   <p class="service-note" *ngIf="selectedPlatform === 'ANDROID'">Payment completion and failure correlation is not established for Android.</p>
   <p class="service-note" *ngIf="selectedPlatform === 'WEB' && qualityValue('workflow_total_events') === 0">No application action or initiation events were observed in this window.</p>
