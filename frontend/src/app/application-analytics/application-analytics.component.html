@@ -35,6 +35,35 @@
 <nav class="section-nav" aria-label="Application analytics sections">
   <button type="button" *ngFor="let section of sections" [class.active]="activeSection === section.key" [attr.aria-pressed]="activeSection === section.key" (click)="selectSection(section.key)">{{section.label}}</button>
 </nav>
+<section class="service-panel insights-panel" [hidden]="activeSection !== 'overview'" *ngIf="insightResult as assessment">
+  <div class="section-heading">
+    <h2><svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Reliability insights</h2>
+    <small>{{rangeReport ? 'Selected report · not live' : 'Selected live window'}} · BigQuery · Rule-based assessment</small>
+  </div>
+  <div class="assessment-summary">
+    <span *ngIf="!assessment.blocked">{{assessment.evaluated}} checks evaluated · {{assessment.skipped}} skipped</span>
+    <span *ngIf="assessment.blocked">Assessment unavailable</span>
+    <span *ngIf="bigQueryWindow as w">{{w.windowStartUtc | date:'MMM d, HH:mm'}} – {{w.windowEndUtc | date:'MMM d, HH:mm'}}</span>
+  </div>
+  <div class="insight-list" *ngIf="assessment.findings.length">
+    <article class="insight-row" *ngFor="let finding of assessment.findings" [attr.data-severity]="finding.severity">
+      <span class="insight-symbol" aria-hidden="true">{{finding.severity === 'info' ? 'i' : '!'}}</span>
+      <div class="insight-content"><div class="insight-title"><strong>{{finding.title}}</strong><span class="insight-level">{{finding.severity}}</span></div>
+        <p>{{finding.evidence}}</p><p class="insight-action">{{finding.action}}</p></div>
+      <button class="insight-link" type="button" *ngIf="finding.section !== 'overview'" (click)="selectSection(finding.section)">View details <span aria-hidden="true">→</span></button>
+    </article>
+  </div>
+  <p class="assessment-empty" *ngIf="!assessment.blocked && !assessment.findings.length">{{assessment.evaluated ? 'No configured threshold breaches or telemetry findings in evaluated checks.' : 'Insufficient observations for assessment.'}} This does not establish overall application health.</p>
+  <details class="insight-settings">
+    <summary>Assessment thresholds</summary>
+    <p class="service-note">Provisional operating thresholds, not approved SLOs. Coverage uses eligible sessions; latency and slow shares use matched sessions. Version comparison uses the two highest numeric version labels in the same window, not verified release chronology. These checks do not establish causation or detect historical anomalies.</p>
+    <div class="threshold-grid">
+      <label *ngFor="let field of insightFields">{{field.label}}<input type="number" [step]="field.step" min="0" [(ngModel)]="insightDraft[field.key]"></label>
+    </div>
+    <div class="threshold-actions"><button type="button" class="primary-action" (click)="saveInsightThresholds()">Apply thresholds</button><button type="button" class="secondary-action" (click)="resetInsightThresholds()">Reset defaults</button><span class="service-note" role="status">{{insightSettingsNote}}</span></div>
+    <p class="negative" role="alert" *ngIf="insightSettingsError">{{insightSettingsError}}</p>
+  </details>
+</section>
 <div class="workspace-section overview-grid" [hidden]="activeSection !== 'overview'">
 <section class="service-panel">
   <div class="section-heading"><h2><svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19v-6m5 6V8m5 11V4m5 15v-9"/></svg>Activity overview</h2><small>GA4 / BigQuery</small></div>
@@ -43,13 +72,6 @@
       <span>{{metric.label}}</span><strong>{{(value(metric) | number:'1.0-2') ?? '—'}}</strong>
       <small>{{metric.source === 'GA4' ? 'GA4 Realtime · last 30 min' : 'BigQuery'}}</small>
     </div>
-    <div class="kpi" *ngFor="let stage of overviewCoverage">
-      <span>{{stage.label}}</span><strong>{{(stage.rate | number:'1.0-2') ?? '—'}}<small class="inline-unit" *ngIf="stage.rate !== null">%</small></strong>
-      <small>BigQuery · eligible sessions</small>
-    </div>
-  </div>
-  <div class="secondary-metrics" *ngIf="isMobile">
-    <div *ngFor="let metric of secondaryOverviewMetrics"><span>{{metric.label}}</span><strong>{{(value(metric) | number:'1.0-0') ?? '—'}}</strong></div>
   </div>
 </section>
 <section class="service-panel">
@@ -72,6 +94,20 @@
   <p class="service-note">Event counts are not unique transactions or success rates.</p>
 </section>
 </div>
+<section class="service-panel experience-panel" *ngIf="isMobile" [hidden]="activeSection !== 'overview'">
+  <div class="section-heading"><h2>User experience</h2><small>BigQuery · Event-based timings</small></div>
+  <div class="kpi-grid">
+    <div class="kpi" *ngFor="let stage of overviewCoverage">
+      <span>{{stage.label}}</span><strong>{{(stage.rate | number:'1.0-2') ?? '—'}}<small class="inline-unit" *ngIf="stage.rate !== null">%</small></strong>
+      <small>{{eligibleSessions ?? '—'}} eligible sessions</small>
+    </div>
+    <div class="kpi" *ngFor="let stage of experienceTimings">
+      <span>{{stage.label}} average</span><strong>{{(stage.average | number:'1.0-2') ?? '—'}}<small class="inline-unit" *ngIf="stage.average !== null"> s</small></strong>
+      <small>P95 {{(stage.p95 | number:'1.0-2') ?? '—'}}<ng-container *ngIf="stage.p95 !== null">s</ng-container> · {{stage.samples ?? '—'}} matched</small>
+    </div>
+  </div>
+  <p class="service-note">Coverage is measured within 5 minutes; unobserved stages are not confirmed failures.</p>
+</section>
 <div class="workspace-section" [hidden]="activeSection !== 'performance'">
     <section class="service-panel" *ngIf="selectedPlatform === 'ANDROID' || selectedPlatform === 'IOS'">
       <div class="section-heading"><h2>Startup performance</h2><small>Matched event timings · seconds</small></div>
