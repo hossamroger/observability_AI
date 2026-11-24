@@ -16,7 +16,7 @@ class BigQueryPerformanceSqlTest {
         assertTrue(sql.contains("stream_id=@ios"));
         assertTrue(sql.contains("screen_name=@home_screen"));
         assertTrue(sql.contains("initiation_times=1 AND purchase_times=1"));
-        assertTrue(sql.contains("started_at <= UNIX_MICROS(@end)-300000000"));
+        assertTrue(sql.contains("started_at < UNIX_MICROS(@end)-300000000"));
         assertTrue(sql.contains("APPROX_QUANTILES(duration_ms,100)"));
         assertTrue(sql.contains("UNION ALL SELECT platform,metric_name,metric_value,metric_scope FROM version_metrics"));
         assertTrue(sql.contains("app_info.version AS app_version"));
