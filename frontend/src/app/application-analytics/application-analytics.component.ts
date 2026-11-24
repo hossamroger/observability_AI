@@ -87,8 +87,9 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
   constructor(private readonly dashboard: DashboardService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['selectedPlatform'] && !changes['selectedPlatform'].firstChange) {
-      this.historyMetric = 'observed_sessions';
+    if (changes['selectedPlatform']) {
+      this.historyMetric = this.isMobile ? 'session_to_home_p95_ms' : 'observed_sessions';
+      if (changes['selectedPlatform'].firstChange) return;
       this.activeSection = 'overview';
       this.versionSearch = '';
       this.resetHistory();
@@ -267,6 +268,22 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
 
   value(definition: MetricDefinition): number | undefined {
     return this.findMetric(definition.source, definition.key)?.metricValue;
+  }
+
+  get primaryOverviewMetrics(): MetricDefinition[] {
+    return this.isMobile ? this.overviewMetrics.slice(0, 2) : this.overviewMetrics;
+  }
+
+  get secondaryOverviewMetrics(): MetricDefinition[] {
+    return this.isMobile ? this.overviewMetrics.slice(2) : [];
+  }
+
+  get overviewCoverage(): {label:string;rate:number|null}[] {
+    if (!this.isMobile) return [];
+    return [
+      {label:'Reached first screen',rate:this.percent(this.performanceMetric('session_to_first_screen_samples')?.metricValue,this.eligibleSessions)},
+      {label:'Reached home',rate:this.percent(this.performanceMetric('session_to_home_samples')?.metricValue,this.eligibleSessions)}
+    ];
   }
 
   get overviewMetrics(): MetricDefinition[] {
