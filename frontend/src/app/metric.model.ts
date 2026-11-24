@@ -14,8 +14,17 @@ export interface MetricObservation {
   demo: boolean;
 }
 
+export interface SourceOutcome {
+  sourceSystem: string;
+  status: 'SUCCESS' | 'FAILED' | 'EMPTY' | 'PARTIAL';
+  errorCategory: string | null;
+  recordCount: number;
+  executedAtUtc: string;
+}
+
 export interface DashboardOverview {
   dataMode: 'DEMO' | 'LIVE';
   generatedAtUtc: string;
   metrics: MetricObservation[];
+  sourceOutcomes?: SourceOutcome[];
 }
