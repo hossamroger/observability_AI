@@ -1,6 +1,6 @@
 <div class="context-bar compact-context">
   <section class="analytics-sources" aria-label="Data sources">
-    <div *ngFor="let source of sourceContexts" class="source-tile">
+    <div *ngFor="let source of sourceContexts; trackBy: trackSource" class="source-tile">
       <div class="source-header"><strong>{{source.name}}</strong><span class="source-state" [attr.data-state]="source.state">{{source.state}}</span></div>
       <ng-container *ngIf="source.window as w; else noSource">
         <p>{{w.windowStartUtc | date:'MMM d, HH:mm'}} – {{w.windowEndUtc | date:'MMM d, HH:mm'}}</p>
@@ -29,7 +29,7 @@
   </section>
   <details class="metric-help source-help"><summary>Source details &amp; reporting rules</summary>
     <div class="source-detail-grid">
-      <div *ngFor="let source of sourceContexts"><strong>{{source.name}}</strong>
+      <div *ngFor="let source of sourceContexts; trackBy: trackSource"><strong>{{source.name}}</strong>
         <ng-container *ngIf="source.window as w"><p>Window: {{w.windowStartUtc | date:'medium'}} – {{w.windowEndUtc | date:'medium'}} ({{(windowMinutes(w) | number:'1.0-1') ?? '—'}} min)<br>Collected: {{w.collectedAtUtc | date:'medium'}}</p></ng-container>
         <p *ngIf="outcome(source.key) as result">Latest attempt: {{result.executedAtUtc | date:'medium'}} · {{result.status}}<ng-container *ngIf="result.errorCategory"> · {{result.errorCategory}}</ng-container></p>
       </div>
