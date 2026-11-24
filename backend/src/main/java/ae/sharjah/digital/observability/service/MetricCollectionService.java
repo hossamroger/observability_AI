@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 public class MetricCollectionService {
     private static final Logger LOG = LoggerFactory.getLogger(MetricCollectionService.class);
     private final List<MonitoringConnector> connectors;
+    private final java.util.Map<String, Long> lastAttemptNanos = new java.util.HashMap<>();
     private final MetricSnapshotRepository snapshots;
     private final CollectionExecutionLogRepository executionLogs;
     private final LiveUpdatePublisher updates;
@@ -31,8 +32,12 @@ public class MetricCollectionService {
     }
 
     /** Failures are isolated by connector; errors are structured, and secrets are never logged. */
-    public void collectAllSources() {
+    public synchronized void collectAllSources() {
         for (MonitoringConnector connector : connectors) {
+            long now = System.nanoTime();
+            Long previous = lastAttemptNanos.get(connector.sourceName());
+            if (previous != null && now - previous < java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(connector.minimumIntervalMillis())) continue;
+            lastAttemptNanos.put(connector.sourceName(), now);
             String executionId = UUID.randomUUID().toString();
             long started = System.nanoTime();
             try {

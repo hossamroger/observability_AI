@@ -6,4 +6,5 @@ import ae.sharjah.digital.observability.domain.CollectionBatch;
 public interface MonitoringConnector {
     String sourceName();
     CollectionBatch collect();
+    default long minimumIntervalMillis() { return 0L; }
 }

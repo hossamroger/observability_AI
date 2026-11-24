@@ -56,12 +56,17 @@
         </svg>
       </section>
     </section>
+    <div class="notice" *ngIf="selectedPlatform !== 'BACKEND'">
+      GA4 Realtime reports active users and events over its rolling 30-minute window.
+      BigQuery reports observed events from a separate, delayed window; counts may be incomplete.
+      Payment and workflow event counts are not transaction success rates.
+    </div>
     <section class="cards">
       <article class="metric-card" *ngFor="let metric of (selectedPlatform === 'BACKEND' ? backendOtherMetrics : selectedMetrics)">
         <div class="source">{{metric.sourceSystem}} · {{metric.serviceName}}</div>
         <div class="metric-value">{{metric.metricValue | number:'1.0-2'}} <span>{{metric.metricUnit}}</span></div>
         <div class="metric-name">{{metric.metricName.replaceAll('_', ' ')}}</div>
-        <div class="metric-time">Observed window ended {{metric.windowEndUtc | date:'mediumTime'}}</div>
+        <div class="metric-time">Window: {{metric.windowStartUtc | date:'mediumTime'}} – {{metric.windowEndUtc | date:'mediumTime'}}<br>Collected {{metric.collectedAtUtc | date:'mediumTime'}}</div>
       </article>
       <article class="empty-card" *ngIf="!selectedMetrics.length && !loading">
         No metrics collected for {{selectedPlatform}} yet. Check connector settings and source permissions.
