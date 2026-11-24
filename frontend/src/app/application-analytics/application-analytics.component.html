@@ -108,7 +108,7 @@
     <label>Source <select [ngModel]="historySource" (ngModelChange)="changeHistorySource($event)" [disabled]="historyLoading">
       <option value="bigquery">BigQuery history</option><option value="stored">Stored snapshots</option>
     </select></label>
-    <label>Metric <select [ngModel]="historyMetric" (ngModelChange)="changeHistoryMetric($event)" [disabled]="historyLoading"><option *ngFor="let option of historyOptions" [ngValue]="option.key">{{option.label}}</option></select></label>
+    <label>Metric <select [ngModel]="historyMetric" (ngModelChange)="changeHistoryMetric($event)" [disabled]="historyLoading"><option *ngFor="let option of historyOptions; trackBy: trackHistoryOption" [ngValue]="option.key">{{option.label}}</option></select></label>
     <label>Period <select [ngModel]="historyPeriod" (ngModelChange)="changeHistoryPeriod($event)" [disabled]="historyLoading">
       <option [ngValue]="60">1 hour</option><option [ngValue]="360">6 hours</option><option [ngValue]="1440">24 hours</option>
     </select></label>
