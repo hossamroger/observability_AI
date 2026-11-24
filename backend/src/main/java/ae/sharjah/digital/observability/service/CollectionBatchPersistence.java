@@ -21,7 +21,8 @@ public class CollectionBatchPersistence {
     @Transactional
     public void persist(String executionId, CollectionBatch batch, long collectionDurationMs) {
         for (MetricObservation metric : batch.observations) {
-            if (!batch.sourceSystem.equals(metric.sourceSystem) || !Double.isFinite(metric.metricValue)
+            if ((!batch.sourceSystem.equals(metric.sourceSystem) && !("DEMO".equals(batch.sourceSystem) && metric.demo))
+                    || !Double.isFinite(metric.metricValue)
                     || metric.windowStartUtc.isAfter(metric.windowEndUtc))
                 throw new IllegalArgumentException("Invalid observation in collection batch");
             snapshots.save(metric);
