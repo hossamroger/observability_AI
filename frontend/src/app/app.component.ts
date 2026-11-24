@@ -30,15 +30,17 @@ export class AppComponent implements OnInit, OnDestroy {
   windowError = '';
   windowLoading = false;
   private windowRequest = 0;
+  private overviewSubscription?: import('rxjs').Subscription;
   private windowSubscription?: import('rxjs').Subscription;
   get windowStart(): string | undefined { return this.windowMetrics[0]?.windowStartUtc; }
   get windowEnd(): string | undefined { return this.windowMetrics[0]?.windowEndUtc; }
   selectWindow(minutes: number): void {
+    this.windowRequest++; this.windowSubscription?.unsubscribe(); this.windowLoading = false;
     this.windowMinutes = minutes; this.page = 0; this.windowMetrics = [];
     this.refreshWindow();
   }
   private refreshWindow(): void {
-    if (this.selectedPlatform !== 'BACKEND') return;
+    if (this.selectedPlatform !== 'BACKEND' || this.windowLoading) return;
     const request = ++this.windowRequest;
     this.windowSubscription?.unsubscribe();
     this.windowLoading = true;
@@ -191,12 +193,18 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.historySubscription?.unsubscribe();
+    this.overviewSubscription?.unsubscribe();
     this.stream?.close();
     this.windowSubscription?.unsubscribe();
     if (this.fallbackRefresh) clearInterval(this.fallbackRefresh);
   }
 
-  selectPlatform(platform: Platform): void { this.selectedPlatform = platform; this.refreshWindow(); }
+  selectPlatform(platform: Platform): void {
+    this.selectedPlatform = platform;
+    if (platform !== 'BACKEND') {
+      this.windowRequest++; this.windowSubscription?.unsubscribe(); this.windowLoading = false;
+    } else this.refreshWindow();
+  }
 
   get selectedMetrics(): MetricObservation[] {
     const data = this.overview?.metrics ?? [];
@@ -219,7 +227,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
   refresh(): void {
     this.refreshWindow();
-    this.dashboard.loadOverview().subscribe({
+    if (this.overviewSubscription && !this.overviewSubscription.closed) return;
+    this.overviewSubscription = this.dashboard.loadOverview().subscribe({
       next: data => { this.overview = data; this.errorMessage = ''; this.loading = false; },
       error: () => { this.errorMessage = 'Backend unavailable. Verify the local server and proxy.'; this.loading = false; }
     });
