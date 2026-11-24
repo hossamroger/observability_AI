@@ -7,6 +7,7 @@
       <small>Collected {{w.collectedAtUtc | date:'MMM d, HH:mm:ss'}}</small>
     </ng-container>
     <ng-template #noSource><p>No observations available</p></ng-template>
+    <small *ngIf="outcome(source.key) as result">Latest attempt {{result.executedAtUtc | date:'MMM d, HH:mm:ss'}} · {{result.status}}<ng-container *ngIf="result.errorCategory"> · {{result.errorCategory}}</ng-container></small>
   </div>
 </section>
 <p class="source-note">GA4 and BigQuery have independent windows and user definitions. Recent collection does not guarantee complete source data.</p>
