@@ -44,8 +44,14 @@ export class ApplicationAnalyticsComponent {
     ];
   }
 
+  windowMinutes(metric: MetricObservation): number | null {
+    const minutes = (Date.parse(metric.windowEndUtc) - Date.parse(metric.windowStartUtc)) / 60000;
+    return Number.isFinite(minutes) && minutes > 0 ? minutes : null;
+  }
+
   get operationMetrics(): MetricDefinition[] {
     if (this.selectedPlatform === 'WEB') return [
+      {key:'workflow_total_events',label:'Total workflow events',source:'BIGQUERY'},
       {key:'workflow_initiation_success_events',label:'Initiation success events',source:'BIGQUERY',tone:'positive'},
       {key:'workflow_initiation_failure_events',label:'Initiation failure events',source:'BIGQUERY',tone:'negative'},
       {key:'workflow_success_events',label:'Action success events',source:'BIGQUERY',tone:'positive'},
@@ -65,7 +71,7 @@ export class ApplicationAnalyticsComponent {
       {label:'Session starts missing user or session ID',key:'quality_missing_start_key_events',denominator:'session_start_events'}
     ];
     if (this.selectedPlatform === 'IOS') checks.push({label:'Initiation / purchase events missing correlation ID',key:'quality_missing_payment_key_events'});
-    if (this.selectedPlatform === 'WEB') checks.push({label:'Workflow events with unclassified result',key:'quality_unclassified_workflow_events'});
+    if (this.selectedPlatform === 'WEB') checks.push({label:'Workflow events with unclassified result',key:'quality_unclassified_workflow_events',denominator:'workflow_total_events'});
     return checks;
   }
 
