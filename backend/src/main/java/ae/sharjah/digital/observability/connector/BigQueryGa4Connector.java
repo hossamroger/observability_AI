@@ -139,9 +139,12 @@ public class BigQueryGa4Connector implements MonitoringConnector {
                 if (!platform.matches("WEB|ANDROID|IOS") || !metric.matches("[a-z][a-z0-9_]*")
                         || fields.path(2).path("v").isNull() || fields.path(2).path("v").isMissingNode())
                     throw new BigQueryCollectionException(BigQueryCollectionException.Category.INVALID_RESULT);
+                String metricScope = fields.path(3).path("v").asText();
+                if (!metricScope.equals("GA4_INTRADAY") && !metricScope.matches("APP_VERSION:[A-Za-z0-9][A-Za-z0-9._+-]{0,63}"))
+                    throw new BigQueryCollectionException(BigQueryCollectionException.Category.INVALID_RESULT);
                 double value = Double.parseDouble(fields.path(2).path("v").asText());
                 if (!Double.isFinite(value) || value < 0) throw new BigQueryCollectionException(BigQueryCollectionException.Category.INVALID_RESULT);
-                observations.add(new MetricObservation(sourceName(), platform, "GA4_INTRADAY", metric, value,
+                observations.add(new MetricObservation(sourceName(), platform, metricScope, metric, value,
                         BigQueryPerformanceSql.metricUnit(metric),
                         start, end, false));
             }
@@ -161,7 +164,7 @@ public class BigQueryGa4Connector implements MonitoringConnector {
     }
 
     static String sql(String table) {
-        return "WITH scoped AS (SELECT platform, event_name, user_pseudo_id, event_timestamp, "
+        return "WITH scoped AS (SELECT platform, event_name, user_pseudo_id, event_timestamp, app_info.version AS app_version, "
             + "(SELECT MAX(p.value.string_value) FROM UNNEST(event_params) p WHERE p.key='firebase_screen') screen_name, "
             + "(SELECT MAX(NULLIF(TRIM(p.value.string_value),'')) FROM UNNEST(event_params) p WHERE p.key='transaction_id') transaction_id, "
             + "(SELECT MAX(p.value.int_value) FROM UNNEST(event_params) p WHERE p.key='ga_session_id') session_id, "
