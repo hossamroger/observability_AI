@@ -35,18 +35,7 @@ final class BigQueryPerformanceSql {
             + "STRUCT('_p95_ms',quantiles[SAFE_OFFSET(95)]),STRUCT('_p99_ms',quantiles[SAFE_OFFSET(99)]), STRUCT('_over_5s',CAST(over5 AS FLOAT64)), STRUCT('_over_10s',CAST(over10 AS FLOAT64)), STRUCT('_over_30s',CAST(over30 AS FLOAT64)), STRUCT('_over_60s',CAST(over60 AS FLOAT64))]) m "
             + "WHERE m.metric_value IS NOT NULL "
             + "UNION ALL SELECT platform,'session_start_eligible_sessions',CAST(eligible AS FLOAT64) FROM session_counts) "
-            + ", version_samples AS (SELECT platform,IF(REGEXP_CONTAINS(session_version,r'^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}
-    }
-
-    static String metricUnit(String metric) {
-        if (metric.endsWith("_ms")) return "ms";
-        if ((metric.endsWith("_samples") || metric.matches(".*_over_(5|10|30|60)s"))) return "samples";
-        if ("observed_users".equals(metric)) return "users";
-        if ("observed_sessions".equals(metric) || metric.endsWith("_sessions")) return "sessions";
-        return "events";
-    }
-}
-),session_version,'UNKNOWN') AS version_name, "
+            + ", version_samples AS (SELECT platform,IF(REGEXP_CONTAINS(session_version,r'^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$'),session_version,'UNKNOWN') AS version_name, "
             + "(first_screen_at-started_at)/1000.0 AS first_ms,(home_at-started_at)/1000.0 AS home_ms FROM session_journeys), "
             + "version_stats AS (SELECT platform,version_name,COUNT(*) AS eligible,COUNT(first_ms) AS first_count,COUNT(home_ms) AS home_count, "
             + "APPROX_QUANTILES(first_ms,100) AS first_quantiles,APPROX_QUANTILES(home_ms,100) AS home_quantiles FROM version_samples GROUP BY platform,version_name), "
@@ -64,7 +53,7 @@ final class BigQueryPerformanceSql {
 
     static String metricUnit(String metric) {
         if (metric.endsWith("_ms")) return "ms";
-        if (metric.endsWith("_samples")) return "samples";
+        if ((metric.endsWith("_samples") || metric.matches(".*_over_(5|10|30|60)s"))) return "samples";
         if ("observed_users".equals(metric)) return "users";
         if ("observed_sessions".equals(metric) || metric.endsWith("_sessions")) return "sessions";
         return "events";
