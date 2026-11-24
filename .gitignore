@@ -15,3 +15,9 @@
 # External local/deployment credentials (never tracked)
 **/credentials.yml
 **/credentials.yaml
+
+# Local persistent monitoring database (contains internal operational telemetry)
+*.mv.db
+*.trace.db
+*.lock.db
+.observability-platform/
