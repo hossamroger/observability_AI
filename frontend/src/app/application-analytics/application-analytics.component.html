@@ -1,7 +1,26 @@
+<section class="service-panel">
+  <div class="section-heading"><h2>Analytics time range</h2><small>BigQuery · GA4 Realtime stays live</small></div>
+  <div class="range-controls">
+    <label>Reporting period <select #rangeSelect [value]="rangeChoice" (change)="selectRange(rangeSelect.value)">
+      <option value="live">Live rolling 30 minutes</option><option value="5">Last 5 minutes</option><option value="15">Last 15 minutes</option>
+      <option value="30">Last 30 minutes</option><option value="60">Last hour</option><option value="360">Last 6 hours</option>
+      <option value="1440">Last 24 hours</option><option value="10080">Last 7 days</option><option value="custom">Custom range</option>
+    </select></label>
+    <ng-container *ngIf="rangeChoice === 'custom'">
+      <label>From (local time) <input type="datetime-local" #from [value]="customFrom" (input)="customFrom = from.value"></label>
+      <label>To (local time) <input type="datetime-local" #to [value]="customTo" (input)="customTo = to.value"></label>
+    </ng-container>
+    <button type="button" [disabled]="rangeChoice === 'live' || rangeLoading" (click)="applyRange()">{{rangeLoading ? 'Loading report…' : 'Apply'}}</button>
+  </div>
+  <p class="service-note" *ngIf="rangeReport">Displayed report: {{rangeReport.windowStartUtc | date:'medium'}} – {{rangeReport.windowEndUtc | date:'medium'}}. Generated {{rangeReport.generatedAtUtc | date:'medium'}}. It will not refresh automatically.</p>
+  <p class="service-note" *ngIf="!rangeReport">Displaying scheduled live observations until a requested report succeeds.</p>
+  <p class="service-note">Relative reporting ends are aligned to 5-minute boundaries after the configured source delay. Reports are limited by the existing query byte cap; long ranges may be rejected. A 5-minute range has no eligible 5-minute startup cohort under the current definition.</p>
+  <p class="negative" role="alert" *ngIf="rangeError">{{rangeError}} Previous displayed data is unchanged.</p>
+</section>
 <section class="analytics-sources" aria-label="Data sources">
   <div *ngFor="let source of [{name:'GA4 Realtime',key:'GA4',window:realtimeWindow},{name:'BigQuery',key:'BIGQUERY',window:bigQueryWindow}]">
     <div class="source-header"><strong>{{source.name}}</strong>
-      <span class="source-state" [class.stale]="freshness(source.window, source.key === 'GA4' ? 'GA4' : 'BIGQUERY') !== 'Recently collected'">{{freshness(source.window, source.key === 'GA4' ? 'GA4' : 'BIGQUERY')}}</span></div>
+      <span class="source-state" [class.stale]="!['Recently collected','On-demand report'].includes(freshness(source.window, source.key === 'GA4' ? 'GA4' : 'BIGQUERY'))">{{freshness(source.window, source.key === 'GA4' ? 'GA4' : 'BIGQUERY')}}</span></div>
     <ng-container *ngIf="source.window as w; else noSource">
       <p>{{w.windowStartUtc | date:'MMM d, HH:mm:ss'}} – {{w.windowEndUtc | date:'MMM d, HH:mm:ss'}}</p>
       <small>Window: {{(windowMinutes(w) | number:'1.0-1') ?? '—'}} min · Collected {{w.collectedAtUtc | date:'MMM d, HH:mm:ss'}}</small>
@@ -83,6 +102,26 @@
   <p class="service-note" *ngIf="selectedPlatform === 'WEB' && qualityValue('workflow_total_events') === 0">No application action or initiation events were observed in this window.</p>
   <p class="service-note">Event counts are not unique transactions or success rates.</p>
 </section>
+<section class="service-panel">
+  <div class="section-heading"><h2>Historical trends</h2><small>Stored observations · no new BigQuery query</small></div>
+  <div class="range-controls">
+    <label>Metric <select #historySelect [value]="historyMetric" (change)="historyMetric = historySelect.value; historyRows = []; historyLoaded = false; historySubscriptionReset()"><option *ngFor="let option of historyOptions" [value]="option.key">{{option.label}}</option></select></label>
+    <label>Period <select #historyPeriodSelect [value]="historyPeriod" (change)="historyPeriod = +historyPeriodSelect.value; historyRows = []; historyLoaded = false; historySubscriptionReset()"><option value="60">1 hour</option><option value="360">6 hours</option><option value="1440">24 hours</option></select></label>
+    <button type="button" [disabled]="historyLoading" (click)="loadHistory()">Load trend</button>
+  </div>
+  <p class="service-note">Each point is a separately collected rolling-window snapshot. Counts overlap and must not be summed; percentiles are not averaged. Missing intervals are not interpolated. Local in-memory data is lost on restart.</p>
+  <p *ngIf="historyLoading">Loading stored history…</p><p class="negative" *ngIf="historyError">{{historyError}}</p>
+  <p *ngIf="historyLoaded && !historyLoading && !historyError && !historyRows.length">No stored observations for the selected metric and period.</p>
+  <ng-container *ngIf="historyPoints.length">
+    <svg class="trend-chart" viewBox="0 0 780 205" role="img" aria-label="Historical metric observation trend">
+      <line x1="44" y1="175" x2="744" y2="175" stroke="#94a3b8"/><line x1="44" y1="30" x2="44" y2="175" stroke="#94a3b8"/>
+      <text x="44" y="21" font-size="11">{{historyMax | number:'1.0-2'}}</text><text x="28" y="175" font-size="11">0</text>
+      <svg:circle *ngFor="let point of historyPoints" [attr.cx]="point.x" [attr.cy]="point.y" r="3" fill="#2672e8"><svg:title>{{point.time | date:'medium'}}: {{point.value | number:'1.0-2'}}</svg:title></svg:circle>
+      <text x="44" y="195" font-size="11">Earlier</text><text x="744" y="195" text-anchor="end" font-size="11">Latest stored point</text>
+    </svg>
+    <p class="service-note">{{historyRows.length}} observations · Latest {{historyRows[historyRows.length-1].windowEndUtc | date:'medium'}}</p>
+  </ng-container>
+</section>
 <details class="service-panel technical">
   <summary>Data quality &amp; coverage</summary>
   <p class="service-note">BigQuery checks describe observed telemetry only. Missing identifiers can exclude events from session or payment correlation; they do not establish a failed user journey.</p>
@@ -94,7 +133,7 @@
     </tr></tbody>
   </table></div>
   <p class="service-note">GA4 active users are not equivalent to BigQuery distinct pseudonymous identifiers. Windows, processing delay and environment filtering differ. No equality test is applied across sources.</p>
-  <p class="service-note">The latest source-wide window is shown. If a platform has no observations in that window, older platform values are not substituted. A missing value is not zero.</p>
+  <p class="service-note">The selected BigQuery report or latest source-wide live window is shown. If a platform has no observations in that window, older platform values are not substituted. A missing value is not zero.</p>
 </details>
 <details class="service-panel technical">
   <summary>Technical metrics <small>({{technicalMetrics.length}} additional observations)</small></summary>
