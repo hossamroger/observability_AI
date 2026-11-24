@@ -2,9 +2,7 @@ package ae.sharjah.digital.observability.service;
 
 import ae.sharjah.digital.observability.connector.MonitoringConnector;
 import ae.sharjah.digital.observability.domain.CollectionBatch;
-import ae.sharjah.digital.observability.domain.MetricObservation;
 import ae.sharjah.digital.observability.persistence.CollectionExecutionLogRepository;
-import ae.sharjah.digital.observability.persistence.MetricSnapshotRepository;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.web.client.HttpStatusCodeException;
@@ -17,16 +15,16 @@ public class MetricCollectionService {
     private static final Logger LOG = LoggerFactory.getLogger(MetricCollectionService.class);
     private final List<MonitoringConnector> connectors;
     private final java.util.Map<String, Long> lastAttemptNanos = new java.util.HashMap<>();
-    private final MetricSnapshotRepository snapshots;
+    private final CollectionBatchPersistence batchPersistence;
     private final CollectionExecutionLogRepository executionLogs;
     private final LiveUpdatePublisher updates;
 
     public MetricCollectionService(List<MonitoringConnector> connectors,
-            MetricSnapshotRepository snapshots,
+            CollectionBatchPersistence batchPersistence,
             CollectionExecutionLogRepository executionLogs,
             LiveUpdatePublisher updates) {
         this.connectors = connectors;
-        this.snapshots = snapshots;
+        this.batchPersistence = batchPersistence;
         this.executionLogs = executionLogs;
         this.updates = updates;
     }
@@ -42,14 +40,13 @@ public class MetricCollectionService {
             long started = System.nanoTime();
             try {
                 CollectionBatch batch = connector.collect();
-                for (MetricObservation metric : batch.observations) snapshots.save(metric);
+                if (!connector.sourceName().equals(batch.sourceSystem))
+                    throw new IllegalStateException("Unexpected batch source");
                 long elapsedMs = (System.nanoTime() - started) / 1_000_000;
-                executionLogs.record(executionId, connector.sourceName(), "SUCCESS",
-                        batch.observations.size(), elapsedMs, null,
-                        "Collected " + batch.observations.size() + " observations successfully");
-                updates.broadcastSourceChange(connector.sourceName());
-                LOG.info("event=metrics_collection_success execution_id={} source={} count={} duration_ms={}",
-                        executionId, connector.sourceName(), batch.observations.size(), elapsedMs);
+                batchPersistence.persist(executionId, batch, elapsedMs);
+                String outcome = batch.observations.isEmpty() ? "EMPTY" : batch.partial ? "PARTIAL" : "SUCCESS";
+                LOG.info("event=metrics_collection_completed execution_id={} source={} outcome={} count={} collection_duration_ms={}",
+                        executionId, connector.sourceName(), outcome, batch.observations.size(), elapsedMs);
             } catch (Exception failure) {
                 long elapsedMs = (System.nanoTime() - started) / 1_000_000;
                 String errorType = sanitizedErrorCategory(failure);
@@ -66,6 +63,9 @@ public class MetricCollectionService {
                 LOG.error("event=metrics_collection_failed execution_id={} source={} category={} duration_ms={}",
                         executionId, connector.sourceName(), errorType, elapsedMs);
             }
+            // Notification is best effort and must not change the persisted collection outcome.
+            try { updates.broadcastSourceChange(connector.sourceName()); }
+            catch (RuntimeException notificationFailure) { LOG.warn("event=collection_notification_failed source={}", connector.sourceName()); }
         }
     }
     private String sanitizedErrorCategory(Throwable exception) {
