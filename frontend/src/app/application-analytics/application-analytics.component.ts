@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { DashboardService } from '../dashboard.service';
@@ -14,7 +15,7 @@ interface MetricDefinition {
 @Component({
   selector: 'app-application-analytics',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './application-analytics.component.html',
   styleUrls: ['./application-analytics.component.css']
 })
@@ -30,6 +31,9 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
   private rangeSubscription?: Subscription;
 
   historyPeriod = 360;
+  historySource: 'bigquery' | 'stored' = 'bigquery';
+  historyReport?: ApplicationRange;
+  historyDisplayedMetric = '';
   historyMetric = 'observed_sessions';
   historyRows: MetricObservation[] = [];
   historyLoading = false;
@@ -42,12 +46,8 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['selectedPlatform'] && !changes['selectedPlatform'].firstChange) {
-      this.historySubscription?.unsubscribe();
-      this.historyRows = [];
-      this.historyLoaded = false;
-      this.historyLoading = false;
-      this.historyError = '';
       this.historyMetric = 'observed_sessions';
+      this.resetHistory();
     }
   }
 
@@ -105,32 +105,105 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
     return items;
   }
 
-  historySubscriptionReset(): void { this.historySubscription?.unsubscribe(); this.historyLoading = false; this.historyError = ''; }
-
-  loadHistory(): void {
+  resetHistory(): void {
     this.historySubscription?.unsubscribe();
     this.historyRows = [];
+    this.historyReport = undefined;
+    this.historyDisplayedMetric = '';
+    this.historyLoaded = false;
+    this.historyLoading = false;
     this.historyError = '';
+  }
+
+  changeHistoryMetric(metric: string): void {
+    this.historyMetric = metric;
+    if (this.historySource === 'bigquery' && this.historyReport && !this.historyLoading) {
+      this.showSourceHistory(this.historyReport);
+    } else {
+      this.resetHistory();
+    }
+  }
+
+  changeHistoryPeriod(period: number): void {
+    this.historyPeriod = period;
+    this.resetHistory();
+  }
+
+  changeHistorySource(source: 'bigquery' | 'stored'): void {
+    this.historySource = source;
+    this.resetHistory();
+  }
+
+  get historyLabel(): string {
+    return this.historyOptions.find(m => m.key === this.historyDisplayedMetric)?.label ?? '';
+  }
+
+  private showSourceHistory(report: ApplicationRange): void {
+    this.historyDisplayedMetric = this.historyMetric;
+    this.historyRows = report.metrics.filter(m => m.platform === this.selectedPlatform && m.metricName === this.historyMetric)
+      .sort((a,b) => Date.parse(a.windowEndUtc) - Date.parse(b.windowEndUtc));
+  }
+
+  loadHistory(): void {
+    this.resetHistory();
     this.historyLoading = true;
     this.historyLoaded = true;
     this.historyRequestedAt = Date.now();
-    this.historySubscription = this.dashboard.loadApplicationHistory(this.selectedPlatform,this.historyMetric,this.historyPeriod).subscribe({
-      next: rows => { this.historyRows = rows; this.historyLoading = false; },
-      error: () => { this.historyError = 'Stored history unavailable.'; this.historyLoading = false; }
-    });
+    this.historyDisplayedMetric = this.historyMetric;
+    if (this.historySource === 'bigquery') {
+      this.historySubscription = this.dashboard.loadApplicationSourceHistory(this.historyPeriod).subscribe({
+        next: report => {
+          this.historyReport = report;
+          this.showSourceHistory(report);
+          this.historyLoading = false;
+        },
+        error: err => {
+          this.historyLoading = false;
+          this.historyError = err.status === 429 ? 'Reporting cooldown: wait at least one minute and retry.'
+            : err.status === 503 ? 'On-demand BigQuery analytics is disabled or unavailable.'
+            : 'BigQuery history failed. Check export availability, query byte limit and backend logs.';
+        }
+      });
+    } else {
+      const platform = this.selectedPlatform, metric = this.historyMetric;
+      this.historySubscription = this.dashboard.loadApplicationHistory(platform,metric,this.historyPeriod).subscribe({
+        next: rows => {
+          this.historyRows = rows.filter(m => m.platform === platform && m.metricName === metric)
+            .sort((a,b) => Date.parse(a.windowEndUtc) - Date.parse(b.windowEndUtc));
+          this.historyLoading = false;
+        },
+        error: () => { this.historyError = 'Stored history unavailable.'; this.historyLoading = false; }
+      });
+    }
   }
 
+  get historyEnd(): number { return this.historyReport ? Date.parse(this.historyReport.windowEndUtc) : this.historyRequestedAt; }
+  get historyStart(): number { return this.historyReport ? Date.parse(this.historyReport.windowStartUtc) : this.historyEnd - this.historyPeriod * 60000; }
   get historyMax(): number { return Math.max(1,...this.historyRows.map(m => this.displayValue(m))); }
-  get historyPoints(): {x:number;y:number;time:string;value:number}[] {
-    if (!this.historyRows.length) return [];
-    const end = this.historyRequestedAt;
-    const start = end - this.historyPeriod * 60000;
-    const max = this.historyMax;
-    return this.historyRows.filter(m => Date.parse(m.windowEndUtc) >= start && Date.parse(m.windowEndUtc) <= end).map(m => ({
-      x:44 + 700 * (Date.parse(m.windowEndUtc)-start)/(end-start),
-      y:175 - 145 * this.displayValue(m)/max,
-      time:m.windowEndUtc,value:this.displayValue(m)
-    }));
+  get historyTicks(): number[] {
+    return [0,1,2,3,4].map(i => this.historyStart + (this.historyEnd-this.historyStart)*i/4);
+  }
+  get historyPoints(): {x:number;y:number;time:string;from:string;value:number}[] {
+    const end = this.historyEnd, start = this.historyStart, max = this.historyMax;
+    if (!this.historyRows.length || end <= start) return [];
+    return this.historyRows.filter(m => Date.parse(m.windowEndUtc) > start && Date.parse(m.windowEndUtc) <= end)
+      .map(m => ({
+        x:44 + 700 * (Date.parse(m.windowEndUtc)-start)/(end-start),
+        y:175 - 145 * this.displayValue(m)/max,
+        time:m.windowEndUtc,from:m.windowStartUtc,value:this.displayValue(m)
+      }));
+  }
+
+  get historySegments(): {x1:number;y1:number;x2:number;y2:number}[] {
+    const points = this.historyPoints;
+    // Connect only adjacent source buckets. Stored rolling snapshots can have irregular gaps.
+    if (!this.historyReport?.bucketSeconds) return [];
+    const interval = this.historyReport.bucketSeconds*1000;
+    return points.slice(1).flatMap((point,i) => {
+      const previous = points[i];
+      return Date.parse(point.time)-Date.parse(previous.time) === interval
+        ? [{x1:previous.x,y1:previous.y,x2:point.x,y2:point.y}] : [];
+    });
   }
   @Input() loading = false;
   @Input() sourceOutcomes: SourceOutcome[] = [];
