@@ -32,31 +32,43 @@
     <div class="notice error" *ngIf="errorMessage">{{errorMessage}}</div>
     <div class="notice" *ngIf="loading">Loading dashboard data…</div>
     <section *ngIf="selectedPlatform === 'BACKEND'" class="service-panel">
-      <div class="service-summary"><div><small>Services in selected window</small><strong>{{serviceRows.length}}</strong></div><div><small>Services reporting errors</small><strong>{{servicesWithErrors}}</strong></div><div><small>Critical services</small><strong>{{criticalServices}}</strong></div></div>
-      <div class="service-toolbar"><h2>Service performance</h2><input #searchBox type="search" aria-label="Search services" placeholder="Search services or IDs" [value]="search" (input)="setSearch(searchBox.value)"></div>
-      <div class="service-pagination"><button *ngFor="let minutes of windows" [disabled]="windowMinutes === minutes" (click)="selectWindow(minutes)">Last {{minutes}} min</button></div>
-      <p class="service-note" *ngIf="windowStart && windowEnd">Reporting window: {{windowStart | date:'medium'}} – {{windowEnd | date:'medium'}}. Dynatrace aggregates over the entire window. Missing values are shown as —.</p>
-      <p class="service-note" role="status" *ngIf="windowLoading">Refreshing service window…</p><p class="notice error" role="alert" *ngIf="windowError">{{windowError}}</p>
-      <details class="threshold-panel"><summary>Health thresholds</summary>
+      <div class="service-summary">
+        <div><small>Services in selected window</small><strong>{{serviceSummaryAvailable ? serviceRows.length : '—'}}</strong></div>
+        <div><small>Services reporting errors</small><strong [class.summary-warning]="serviceSummaryAvailable && servicesWithErrors > 0">{{serviceSummaryAvailable ? servicesWithErrors : '—'}}</strong></div>
+        <div><small>Critical services</small><strong [class.summary-critical]="serviceSummaryAvailable && criticalServices > 0">{{serviceSummaryAvailable ? criticalServices : '—'}}</strong></div>
+      </div>
+      <div class="service-toolbar service-heading"><h2>Service performance</h2><span class="service-note">Dynatrace · {{filteredRows.length}} matching services</span></div>
+      <div class="service-filters">
+        <div class="window-options" role="group" aria-label="Service reporting window">
+          <button type="button" *ngFor="let minutes of windows" [class.chosen]="windowMinutes === minutes" [attr.aria-pressed]="windowMinutes === minutes" [disabled]="windowMinutes === minutes || windowLoading" (click)="selectWindow(minutes)">{{minutes}} min</button>
+        </div>
+        <label class="health-filter">Health <select #healthSelect [value]="healthFilter" (change)="healthFilter = healthSelect.value; page = 0"><option *ngFor="let status of ['ALL','CRITICAL','WARNING','HEALTHY','LOW TRAFFIC','UNKNOWN']">{{status}}</option></select></label>
+        <div class="service-search"><input #searchBox type="search" aria-label="Search services" placeholder="Search services or IDs" [value]="search" (input)="setSearch(searchBox.value)"><button type="button" *ngIf="search || healthFilter !== 'ALL'" (click)="clearServiceFilters()">Clear filters</button></div>
+      </div>
+      <div class="service-window-meta">
+        <span *ngIf="windowStart && windowEnd">Window: {{windowStart | date:'MMM d, HH:mm'}} – {{windowEnd | date:'MMM d, HH:mm'}}</span>
+        <span class="service-note" role="status" *ngIf="windowLoading">Refreshing service window…</span>
+        <details class="backend-help"><summary>Metric definitions</summary><p>Dynatrace aggregates over the selected window. Failed service calls are not unique affected users. Unknown health indicates missing or inconsistent metrics. — means unavailable.</p></details>
+      </div>
+      <p class="notice error" role="alert" *ngIf="windowError">{{windowError}}</p>
+      <details class="threshold-panel compact-thresholds"><summary>Health thresholds</summary>
         <label>Warning failure % <input #warn type="number" [value]="warningRate" (change)="setThreshold('warningRate',warn.value)"></label>
         <label>Critical failure % <input #crit type="number" [value]="criticalRate" (change)="setThreshold('criticalRate',crit.value)"></label>
         <label>Minimum requests <input #min type="number" [value]="minimumRequests" (change)="setThreshold('minimumRequests',min.value)"></label>
         <label>Slow P95 (ms) <input #slow type="number" [value]="slowP95" (change)="setThreshold('slowP95',slow.value)"></label>
       </details>
-      <label class="health-filter">Health <select #healthSelect (change)="healthFilter = healthSelect.value; page = 0"><option *ngFor="let status of ['ALL','CRITICAL','WARNING','HEALTHY','LOW TRAFFIC','UNKNOWN']">{{status}}</option></select></label>
-      <p class="service-note">Impact ranking uses failed service calls, not unique affected users. Unknown indicates missing or inconsistent metrics.</p>
       <div class="table-scroll"><table class="service-table">
         <thead><tr><th><button (click)="setSort('name')">Service</button></th><th>Health</th><th *ngFor="let col of columns"><button (click)="setSort(col.key)">{{col.label}} {{sortBy === col.key ? (descending ? '↓' : '↑') : ''}}</button></th></tr></thead>
         <tbody><tr *ngFor="let row of visibleRows; trackBy: trackService"><td [title]="row.id"><button class="service-link" (click)="openService(row.id)">{{row.name}}</button></td><td><span class="health-pill" [attr.data-health]="health(row)">{{health(row)}}</span></td>
           <td *ngFor="let col of columns"><ng-container *ngIf="row.metrics[col.key] as metric; else missing"><span [class.error-value]="col.key === 'failure' && metric.metricValue > 0" [title]="'Window ended: ' + metric.windowEndUtc">{{metric.metricValue | number:'1.0-2'}}</span></ng-container><ng-template #missing>—</ng-template></td>
         </tr></tbody>
       </table></div>
-      <p *ngIf="!visibleRows.length">No matching service data.</p>
-      <div class="service-pagination"><button [disabled]="currentPage === 0" (click)="page = currentPage - 1">Previous</button><span>Page {{currentPage + 1}} / {{pageCount}} · {{filteredRows.length}} services</span><button [disabled]="currentPage + 1 >= pageCount" (click)="page = currentPage + 1">Next</button></div>
+      <p class="service-empty" *ngIf="!visibleRows.length && !windowLoading && !windowError">{{serviceRows.length ? 'No services match these filters.' : 'No service observations in this window.'}}</p>
+      <div class="service-pagination" *ngIf="filteredRows.length"><button [disabled]="currentPage === 0" (click)="page = currentPage - 1">Previous</button><span>Page {{currentPage + 1}} / {{pageCount}} · {{filteredRows.length}} services</span><button [disabled]="currentPage + 1 >= pageCount" (click)="page = currentPage + 1">Next</button></div>
       <section class="history-panel" *ngIf="selectedServiceId">
         <div class="service-toolbar"><h3>{{selectedService?.name || selectedServiceId}}</h3><button (click)="closeService()">Close details</button></div>
         <p class="service-note">{{selectedServiceId}} · {{selectedService ? health(selectedService) : 'Outside current window'}}</p>
-        <div class="history-controls"><label>History <select #period (change)="historyMinutes = +period.value; loadHistory()"><option value="60">1 hour</option><option value="360">6 hours</option><option value="1440">24 hours</option></select></label>
+        <div class="history-controls"><label>History <select #period (change)="historyMinutes = +period.value; loadHistory()"><option value="60" [selected]="historyMinutes === 60">1 hour</option><option value="360" [selected]="historyMinutes === 360">6 hours</option><option value="1440" [selected]="historyMinutes === 1440">24 hours</option></select></label>
         
         <button *ngFor="let col of columns" [class.chosen]="historyMetric === col.key" (click)="historyMetric = col.key">{{col.label}}</button><button (click)="loadHistory()">Refresh</button></div>
         <p class="service-note">Stored one-minute observations. Gaps are not interpolated; percentiles are not averaged.</p>
