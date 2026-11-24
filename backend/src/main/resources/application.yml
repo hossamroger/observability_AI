@@ -28,6 +28,16 @@ monitoring:
       web: ${GA4_WEB_STREAM_ID:}
       android: ${GA4_ANDROID_STREAM_ID:}
       ios: ${GA4_IOS_STREAM_ID:}
+  bigquery:
+    enabled: false
+    project-id: ${BIGQUERY_PROJECT_ID:}
+    dataset-id: ${BIGQUERY_DATASET_ID:}
+    location: ${BIGQUERY_LOCATION:}
+    credentials-path: ${BIGQUERY_CREDENTIALS_PATH:}
+    property-timezone: ${BIGQUERY_PROPERTY_TIMEZONE:Asia/Dubai}
+    interval-ms: 300000
+    maximum-bytes-billed: 1073741824
+    lag-seconds: 120
   dynatrace:
     enabled: false
     url: ${DYNATRACE_URL:}
