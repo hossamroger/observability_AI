@@ -71,6 +71,9 @@ public class MetricCollectionService {
     private String sanitizedErrorCategory(Throwable exception) {
         Throwable cause = exception;
         while (cause != null) {
+            if (cause instanceof ae.sharjah.digital.observability.connector.BigQueryCollectionException) {
+                return ((ae.sharjah.digital.observability.connector.BigQueryCollectionException) cause).category();
+            }
             if (cause instanceof HttpStatusCodeException) {
                 return "HTTP_" + ((HttpStatusCodeException) cause).getRawStatusCode();
             }

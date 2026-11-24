@@ -53,9 +53,9 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             @Value("${monitoring.bigquery.maximum-bytes-billed:1073741824}") long maximumBytes,
             @Value("${monitoring.bigquery.lag-seconds:120}") long lag) {
         this.http = http; this.json = json;
-        this.project = project; this.dataset = dataset; this.location = location;
+        this.project = project.trim(); this.dataset = dataset.trim(); this.location = location.trim();
         this.credentialsPath = credentialsPath.trim().isEmpty() ? ga4Credentials : credentialsPath;
-        this.web = web; this.android = android; this.ios = ios;
+        this.web = web.trim(); this.android = android.trim(); this.ios = ios.trim();
         this.zone = ZoneId.of(timezone);
         this.interval = Math.max(300000L, interval);
         this.maximumBytes = maximumBytes; this.lag = Math.max(0L, lag);
@@ -65,11 +65,19 @@ public class BigQueryGa4Connector implements MonitoringConnector {
     @Override public long minimumIntervalMillis() { return interval; }
 
     private void validate() {
-        if (!project.matches("[a-z][a-z0-9-]{4,28}[a-z0-9]") || !dataset.matches("[A-Za-z0-9_]+")
-                || !location.matches("[A-Za-z0-9-]+") || maximumBytes <= 0
-                || !web.matches("[0-9]+") || !android.matches("[0-9]+") || !ios.matches("[0-9]+")
-                || web.equals(android) || web.equals(ios) || android.equals(ios))
-            throw new IllegalStateException("Invalid BigQuery configuration");
+        List<String> invalid = new ArrayList<>();
+        if (!project.matches("[a-z][a-z0-9-]{4,28}[a-z0-9]")) invalid.add("project-id");
+        if (!dataset.matches("[A-Za-z0-9_]+")) invalid.add("dataset-id");
+        if (!location.matches("[A-Za-z0-9-]+")) invalid.add("location");
+        if (maximumBytes <= 0) invalid.add("maximum-bytes-billed");
+        if (!web.matches("[0-9]+")) invalid.add("ga4.streams.web");
+        if (!android.matches("[0-9]+")) invalid.add("ga4.streams.android");
+        if (!ios.matches("[0-9]+")) invalid.add("ga4.streams.ios");
+        if (web.equals(android) || web.equals(ios) || android.equals(ios)) invalid.add("duplicate-stream-ids");
+        if (!invalid.isEmpty()) {
+            LOG.error("event=bigquery_invalid_configuration invalid_fields={}", String.join(",", invalid));
+            throw new BigQueryCollectionException(BigQueryCollectionException.Category.INVALID_CONFIG);
+        }
     }
 
     private GoogleCredentials credentials() throws Exception {
@@ -113,8 +121,12 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             String response = http.postForObject("https://bigquery.googleapis.com/bigquery/v2/projects/" + project + "/queries",
                     new HttpEntity<>(request, headers), String.class);
             JsonNode root = json.readTree(response);
-            if (!root.path("jobComplete").asBoolean() || root.path("errors").size() > 0 || root.hasNonNull("pageToken"))
-                throw new IllegalStateException("BigQuery result incomplete or failed");
+            if (root.path("errors").size() > 0)
+                throw new BigQueryCollectionException(BigQueryCollectionException.Category.QUERY_ERRORS);
+            if (!root.path("jobComplete").asBoolean())
+                throw new BigQueryCollectionException(BigQueryCollectionException.Category.QUERY_PENDING);
+            if (root.hasNonNull("pageToken"))
+                throw new BigQueryCollectionException(BigQueryCollectionException.Category.PAGINATED_RESULT);
             List<MetricObservation> observations = new ArrayList<>();
             for (JsonNode row : root.path("rows")) {
                 JsonNode fields = row.path("f");
@@ -122,9 +134,9 @@ public class BigQueryGa4Connector implements MonitoringConnector {
                 String metric = fields.path(1).path("v").asText();
                 if (!platform.matches("WEB|ANDROID|IOS") || !metric.matches("[a-z_]+")
                         || fields.path(2).path("v").isNull() || fields.path(2).path("v").isMissingNode())
-                    throw new IllegalStateException("Unexpected BigQuery result");
+                    throw new BigQueryCollectionException(BigQueryCollectionException.Category.INVALID_RESULT);
                 double value = Double.parseDouble(fields.path(2).path("v").asText());
-                if (!Double.isFinite(value) || value < 0) throw new IllegalStateException("Invalid metric");
+                if (!Double.isFinite(value) || value < 0) throw new BigQueryCollectionException(BigQueryCollectionException.Category.INVALID_RESULT);
                 observations.add(new MetricObservation(sourceName(), platform, "GA4_INTRADAY", metric, value,
                         metric.equals("observed_users") ? "users" : metric.equals("observed_sessions") ? "sessions" : "events",
                         start, end, false));
