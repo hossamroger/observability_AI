@@ -34,7 +34,7 @@ public class BigQueryGa4Connector implements MonitoringConnector {
     private static final Logger LOG = LoggerFactory.getLogger(BigQueryGa4Connector.class);
     private final RestTemplate http;
     private final ObjectMapper json;
-    private final String project, dataset, location, credentialsPath, web, android, ios;
+    private final String project, dataset, location, credentialsPath, web, android, ios, homeScreen;
     private final ZoneId zone;
     private final long interval, maximumBytes, lag;
     private GoogleCredentials credentials;
@@ -51,7 +51,8 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             @Value("${monitoring.bigquery.property-timezone:Asia/Dubai}") String timezone,
             @Value("${monitoring.bigquery.interval-ms:300000}") long interval,
             @Value("${monitoring.bigquery.maximum-bytes-billed:1073741824}") long maximumBytes,
-            @Value("${monitoring.bigquery.lag-seconds:120}") long lag) {
+            @Value("${monitoring.bigquery.lag-seconds:120}") long lag,
+            @Value("${monitoring.bigquery.home-screen-name:home_page}") String homeScreen) {
         this.http = http; this.json = json;
         this.project = project.trim(); this.dataset = dataset.trim(); this.location = location.trim();
         this.credentialsPath = credentialsPath.trim().isEmpty() ? ga4Credentials : credentialsPath;
@@ -59,6 +60,7 @@ public class BigQueryGa4Connector implements MonitoringConnector {
         this.zone = ZoneId.of(timezone);
         this.interval = Math.max(300000L, interval);
         this.maximumBytes = maximumBytes; this.lag = Math.max(0L, lag);
+        this.homeScreen = homeScreen.trim();
     }
 
     @Override public String sourceName() { return "BIGQUERY"; }
@@ -70,6 +72,7 @@ public class BigQueryGa4Connector implements MonitoringConnector {
         if (!dataset.matches("[A-Za-z0-9_]+")) invalid.add("dataset-id");
         if (!location.matches("[A-Za-z0-9-]+")) invalid.add("location");
         if (maximumBytes <= 0) invalid.add("maximum-bytes-billed");
+        if (homeScreen.isEmpty()) invalid.add("home-screen-name");
         if (!web.matches("[0-9]+")) invalid.add("ga4.streams.web");
         if (!android.matches("[0-9]+")) invalid.add("ga4.streams.android");
         if (!ios.matches("[0-9]+")) invalid.add("ga4.streams.ios");
@@ -114,7 +117,8 @@ public class BigQueryGa4Connector implements MonitoringConnector {
                 .add(param("web", "STRING", web)).add(param("android", "STRING", android))
                 .add(param("ios", "STRING", ios))
                 .add(param("start", "TIMESTAMP", start.toString()))
-                .add(param("end", "TIMESTAMP", end.toString()));
+                .add(param("end", "TIMESTAMP", end.toString()))
+                .add(param("home_screen", "STRING", homeScreen));
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(credentials().getAccessToken().getTokenValue());
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -132,13 +136,13 @@ public class BigQueryGa4Connector implements MonitoringConnector {
                 JsonNode fields = row.path("f");
                 String platform = fields.path(0).path("v").asText();
                 String metric = fields.path(1).path("v").asText();
-                if (!platform.matches("WEB|ANDROID|IOS") || !metric.matches("[a-z_]+")
+                if (!platform.matches("WEB|ANDROID|IOS") || !metric.matches("[a-z][a-z0-9_]*")
                         || fields.path(2).path("v").isNull() || fields.path(2).path("v").isMissingNode())
                     throw new BigQueryCollectionException(BigQueryCollectionException.Category.INVALID_RESULT);
                 double value = Double.parseDouble(fields.path(2).path("v").asText());
                 if (!Double.isFinite(value) || value < 0) throw new BigQueryCollectionException(BigQueryCollectionException.Category.INVALID_RESULT);
                 observations.add(new MetricObservation(sourceName(), platform, "GA4_INTRADAY", metric, value,
-                        metric.equals("observed_users") ? "users" : metric.equals("observed_sessions") ? "sessions" : "events",
+                        BigQueryPerformanceSql.metricUnit(metric),
                         start, end, false));
             }
             LOG.info("event=bigquery_ga4_aggregated observations={} bytes_processed={} window_start={} window_end={}",
@@ -157,7 +161,9 @@ public class BigQueryGa4Connector implements MonitoringConnector {
     }
 
     static String sql(String table) {
-        return "WITH scoped AS (SELECT platform, event_name, user_pseudo_id, "
+        return "WITH scoped AS (SELECT platform, event_name, user_pseudo_id, event_timestamp, "
+            + "(SELECT MAX(p.value.string_value) FROM UNNEST(event_params) p WHERE p.key='firebase_screen') screen_name, "
+            + "(SELECT MAX(NULLIF(TRIM(p.value.string_value),'')) FROM UNNEST(event_params) p WHERE p.key='transaction_id') transaction_id, "
             + "(SELECT MAX(p.value.int_value) FROM UNNEST(event_params) p WHERE p.key='ga_session_id') session_id, "
             + "(SELECT MAX(LOWER(p.value.string_value)) FROM UNNEST(event_params) p WHERE p.key='action_result') action_result "
             + "FROM `" + table + "` WHERE event_timestamp >= UNIX_MICROS(@start) AND event_timestamp < UNIX_MICROS(@end) "
@@ -174,8 +180,8 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             + "COUNTIF(event_name='application_action' AND action_result='failed') workflow_failure_events, "
             + "COUNTIF(event_name='application_initiate_action' AND action_result='success') workflow_initiation_success_events, "
             + "COUNTIF(event_name='application_initiate_action' AND action_result='failed') workflow_initiation_failure_events "
-            + "FROM scoped GROUP BY platform) "
-            + "SELECT platform, m.metric_name, m.metric_value FROM a, UNNEST(["
+            + "FROM scoped GROUP BY platform), base_metrics AS ("
+            + "SELECT platform, m.metric_name, CAST(m.metric_value AS FLOAT64) AS metric_value FROM a, UNNEST(["
             + "STRUCT('observed_events' AS metric_name, events AS metric_value), STRUCT('observed_users',observed_users), "
             + "STRUCT('observed_sessions',observed_sessions), STRUCT('session_start_events',session_starts), "
             + "STRUCT('screen_view_events',screen_views), STRUCT('page_view_events',page_views), STRUCT('service_click_events',service_clicks), "
@@ -186,6 +192,7 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             + "WHERE m.metric_name IN ('observed_events','observed_users','observed_sessions','session_start_events') "
             + "OR (platform IN ('ANDROID','IOS') AND m.metric_name IN ('screen_view_events','service_click_events','payment_initiated_events')) "
             + "OR (platform='IOS' AND m.metric_name IN ('purchase_events','payment_failure_events')) "
-            + "OR (platform='WEB' AND (m.metric_name='page_view_events' OR STARTS_WITH(m.metric_name,'workflow_'))) ORDER BY platform,m.metric_name";
+            + "OR (platform='WEB' AND (m.metric_name='page_view_events' OR STARTS_WITH(m.metric_name,'workflow_')))) "
+            + BigQueryPerformanceSql.appendMetrics();
     }
 }
