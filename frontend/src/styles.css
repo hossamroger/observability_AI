@@ -30,3 +30,29 @@ button, input, select { min-height: 34px; }
 h1, h2, h3, p { overflow-wrap: anywhere; }
 h1, h2, h3 { color: var(--ink); }
 ::selection { background: #cfe3fc; color: #123b70; }
+
+/* Shared theme tokens for all workspace views. */
+.shell.dark {
+  color-scheme:dark;
+  --canvas:#0b1424; --surface:#121f32; --muted-surface:#18283e;
+  --ink:#e5edf7; --muted:#a9bbd0; --border:#30425b;
+  --accent:#8cbcff; --accent-soft:#203954; --success:#69d5a5;
+  --danger:#ff9892; --warning:#f3c46d;
+}
+.shell.dark .topbar { background:#0a1323; border-color:var(--border); }
+.shell.dark .metric-card,.shell.dark .empty-card,.shell.dark .range-controls input,.shell.dark .range-controls select,.shell.dark .table-toolbar input,.shell.dark .secondary-action { background:var(--surface); color:var(--ink); }
+.shell.dark .range-controls button,.shell.dark .primary-action,.shell.dark .window-options button.chosen,.shell.dark .history-panel button.chosen { background:#28578d; border-color:#426da2; color:#f4f8ff; }
+.shell.dark .service-table tbody tr:hover { background:var(--muted-surface); }
+.shell.dark .section-nav { border-color:var(--border); }
+.shell.dark .journey-track { background:#31435c; }
+.shell.dark .source-state,.shell.dark .health-pill[data-health="HEALTHY"] { background:#163b35; color:var(--success); }
+.shell.dark .source-state[data-state="Collection failed"],.shell.dark .health-pill[data-health="CRITICAL"],.shell.dark .notice.error,.shell.dark [role="alert"] { background:#41262e; color:var(--danger); border-color:#70434a; }
+.shell.dark .source-state[data-state="Stale"],.shell.dark .source-state[data-state="Partial collection"],.shell.dark .source-state[data-state="No observations returned"],.shell.dark .source-state[data-state="Report: partial coverage"],.shell.dark .health-pill[data-health="WARNING"],.shell.dark .notice.demo { background:#42351f; color:var(--warning); border-color:#725b34; }
+.shell.dark .source-state[data-state="No data"],.shell.dark .source-state[data-state="Unknown"],.shell.dark .health-pill:not([data-health="HEALTHY"]):not([data-health="CRITICAL"]):not([data-health="WARNING"]) { background:var(--muted-surface); color:var(--muted); }
+.shell.dark .source-state[data-state="On-demand report"] { background:var(--accent-soft); color:var(--accent); }
+.shell.dark .insight-row { --finding-ink:var(--accent); --finding-fill:#203954; }
+.shell.dark .insight-row[data-severity="critical"] { --finding-ink:var(--danger); --finding-fill:#41262e; }
+.shell.dark .insight-row[data-severity="warning"] { --finding-ink:var(--warning); --finding-fill:#42351f; }
+.shell.dark svg text { fill:var(--muted); }
+.shell.dark .trend-chart line[stroke="#dbe2ea"] { stroke:var(--border); }
+.shell.dark .trend-chart circle { stroke:var(--surface); }
