@@ -104,6 +104,8 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
                     new HttpEntity<>(request, headers), String.class).getBody();
             JsonNode root = json.readTree(body);
             List<MetricObservation> results = new ArrayList<>();
+            java.util.Set<String> reportedPlatforms = new java.util.HashSet<>();
+            if (root.path("rowCount").asInt(0) > root.path("rows").size()) throw new IllegalStateException("Incomplete GA4 report");
             Instant end = Instant.now();
             Instant start = end.minusSeconds(1800);
             for (JsonNode row : root.path("rows")) {
@@ -112,17 +114,24 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
                 String stream = row.path("dimensionValues").path(1).path("value").asText("UNKNOWN");
                 if (!stream.equals(productionStreams.get(platform))) continue;
                 String service = "STREAM_" + stream;
-                double users = row.path("metricValues").path(0).path("value").asDouble();
-                double events = row.path("metricValues").path(1).path("value").asDouble();
+                if (!reportedPlatforms.add(platform)) throw new IllegalStateException("Duplicate GA4 platform row");
+                double users = parseCount(row.path("metricValues").path(0).path("value"));
+                double events = parseCount(row.path("metricValues").path(1).path("value"));
                 results.add(new MetricObservation(sourceName(), platform, service,
                         "active_users_last_30m", users, "users", start, end, false));
                 results.add(new MetricObservation(sourceName(), platform, service,
                         "event_count_last_30m", events, "events", start, end, false));
             }
-            return new CollectionBatch(sourceName(), results);
+            return new CollectionBatch(sourceName(), results, !results.isEmpty() && reportedPlatforms.size() < productionStreams.size());
         } catch (Exception error) {
             throw new IllegalStateException("GA4 realtime collection failed: "
                     + error.getClass().getSimpleName(), error);
         }
+    }
+    static double parseCount(JsonNode value) {
+        if (value.isMissingNode() || value.isNull()) throw new IllegalArgumentException("Missing GA4 count");
+        double count = Double.parseDouble(value.asText());
+        if (!Double.isFinite(count) || count < 0 || count != Math.floor(count)) throw new IllegalArgumentException("Invalid GA4 count");
+        return count;
     }
 }
