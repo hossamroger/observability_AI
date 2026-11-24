@@ -30,6 +30,16 @@ final class BigQueryAggregateValidator {
             ordered(metrics, "quality_missing_start_key_events", "quality_missing_session_key_events");
             ordered(metrics, "quality_missing_payment_key_events", "observed_events");
             ordered(metrics, "quality_unclassified_workflow_events", "observed_events");
+            ordered(metrics, "workflow_total_events", "observed_events");
+            ordered(metrics, "quality_unclassified_workflow_events", "workflow_total_events");
+            if (metrics.containsKey("workflow_total_events")
+                    && metrics.containsKey("workflow_success_events") && metrics.containsKey("workflow_failure_events")
+                    && metrics.containsKey("workflow_initiation_success_events") && metrics.containsKey("workflow_initiation_failure_events")
+                    && metrics.containsKey("quality_unclassified_workflow_events")) {
+                double classified = metrics.get("workflow_success_events") + metrics.get("workflow_failure_events")
+                        + metrics.get("workflow_initiation_success_events") + metrics.get("workflow_initiation_failure_events");
+                require(classified + metrics.get("quality_unclassified_workflow_events") == metrics.get("workflow_total_events"));
+            }
             ordered(metrics, "session_to_home_samples", "session_to_first_screen_samples");
             ordered(metrics, "session_to_first_screen_samples", "session_start_eligible_sessions");
             ordered(metrics, "payment_to_purchase_samples", "payment_initiated_events");
