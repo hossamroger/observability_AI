@@ -28,7 +28,7 @@ export interface Finding {
 }
 export interface InsightResult { findings:Finding[]; evaluated:number; skipped:number; blocked:boolean; }
 export interface InsightInput {
-  platform:Platform; metrics:readonly MetricObservation[]; sourceState:string; thresholds:InsightThresholds;
+  platform:Platform; metrics:readonly MetricObservation[]; sourceState:string; historical:boolean; nowMs:number; thresholds:InsightThresholds;
 }
 const fmt = (n:number) => new Intl.NumberFormat('en-US',{maximumFractionDigits:1}).format(n);
 const valid = (n:number|undefined): n is number => n != null && Number.isFinite(n) && n >= 0;
@@ -54,9 +54,11 @@ export function evaluateInsights(input:InsightInput):InsightResult {
     result.findings.push({id,severity,title,evidence,action,section});
   const overall=input.metrics.find(m=>m.platform===platform && m.sourceSystem==='BIGQUERY' && m.serviceName==='GA4_INTRADAY');
   const partial=sourceState==='Partial collection'||sourceState==='Report: partial coverage';
-  if (!overall || (!partial && !['Recently collected','On-demand report'].includes(sourceState)) || !validThresholds(t)) {
+  const age=overall ? input.nowMs-Date.parse(overall.collectedAtUtc) : NaN;
+  const stale=!input.historical && (!Number.isFinite(age)||age>600000||age < -60000);
+  if (!overall || stale || (!partial && !['Recently collected','On-demand report'].includes(sourceState)) || !validThresholds(t)) {
     result.blocked=true;
-    add('coverage','info','Assessment unavailable',overall ? 'BigQuery status: '+sourceState+'.' : 'No BigQuery observations for the selected platform and window.',
+    add('coverage','info','Assessment unavailable',overall ? (stale ? 'The selected observations are stale or have an invalid collection timestamp.' : 'BigQuery status: '+sourceState+'.') : 'No BigQuery observations for the selected platform and window.',
       'Review source status before interpreting reliability.', 'diagnostics');
     return result;
   }
