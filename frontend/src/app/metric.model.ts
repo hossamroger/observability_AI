@@ -34,5 +34,6 @@ export interface ApplicationRange {
   windowEndUtc: string;
   generatedAtUtc: string;
   partial: boolean;
+  bucketSeconds?: number;
   metrics: MetricObservation[];
 }
