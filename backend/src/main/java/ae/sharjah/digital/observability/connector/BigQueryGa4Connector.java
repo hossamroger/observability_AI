@@ -95,11 +95,22 @@ public class BigQueryGa4Connector implements MonitoringConnector {
         return credentials;
     }
 
+    public Instant latestAvailableEnd() {
+        return Instant.now().minusSeconds(lag).truncatedTo(ChronoUnit.MINUTES);
+    }
+
     @Override public CollectionBatch collect() {
+        Instant end = latestAvailableEnd();
+        return collectWindow(end.minusSeconds(1800), end);
+    }
+
+    /** Serialize only BigQuery jobs; other source collectors remain independent. */
+    public synchronized CollectionBatch collectWindow(Instant start, Instant end) {
         try {
             validate();
-            Instant end = Instant.now().minusSeconds(lag).truncatedTo(ChronoUnit.MINUTES);
-            Instant start = end.minusSeconds(1800);
+            if (!start.isBefore(end) || end.isAfter(latestAvailableEnd())
+                    || java.time.Duration.between(start, end).compareTo(java.time.Duration.ofDays(7)) > 0)
+                throw new IllegalArgumentException("Unsupported BigQuery reporting window");
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(credentials().getAccessToken().getTokenValue());
             headers.setContentType(MediaType.APPLICATION_JSON);
