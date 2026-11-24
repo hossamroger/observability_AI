@@ -124,7 +124,7 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             headers.setContentType(MediaType.APPLICATION_JSON);
             String response = http.postForObject("https://bigquery.googleapis.com/bigquery/v2/projects/" + project + "/queries",
                     new HttpEntity<>(request, headers), String.class);
-            JsonNode root = json.readTree(response);
+            JsonNode root = awaitQueryResult(json.readTree(response), headers);
             if (root.path("errors").size() > 0)
                 throw new BigQueryCollectionException(BigQueryCollectionException.Category.QUERY_ERRORS);
             if (!root.path("jobComplete").asBoolean())
@@ -154,6 +154,26 @@ public class BigQueryGa4Connector implements MonitoringConnector {
         } catch (Exception failure) {
             throw new IllegalStateException("BigQuery GA4 collection failed", failure);
         }
+    }
+
+    /** Poll the same query job, never resubmit a potentially billable query. */
+    private JsonNode awaitQueryResult(JsonNode result, HttpHeaders headers) throws Exception {
+        if (result.path("jobComplete").asBoolean() || result.path("errors").size() > 0) return result;
+        String jobId = result.path("jobReference").path("jobId").asText();
+        if (jobId.isEmpty()) return result;
+        java.net.URI uri = org.springframework.web.util.UriComponentsBuilder
+                .fromHttpUrl("https://bigquery.googleapis.com/bigquery/v2/projects")
+                .pathSegment(project, "queries", jobId)
+                .queryParam("location", location)
+                .queryParam("timeoutMs", 2000)
+                .build().encode().toUri();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            String response = http.exchange(uri, org.springframework.http.HttpMethod.GET,
+                    new HttpEntity<Void>(headers), String.class).getBody();
+            result = json.readTree(response);
+            if (result.path("jobComplete").asBoolean() || result.path("errors").size() > 0) break;
+        }
+        return result;
     }
 
     private ObjectNode param(String name, String type, String value) {
