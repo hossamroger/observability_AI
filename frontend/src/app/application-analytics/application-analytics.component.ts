@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { DashboardService } from '../dashboard.service';
-import { DEFAULT_THRESHOLDS, evaluateInsights, InsightResult, InsightThresholds, validThresholds } from './reliability-insights';
+import { DEFAULT_THRESHOLDS, evaluateInsights, Finding, InsightResult, InsightThresholds, validThresholds } from './reliability-insights';
 import { MetricObservation, Platform, SourceOutcome, ApplicationRange } from '../metric.model';
 
 interface MetricDefinition {
@@ -68,6 +68,7 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
     this.insightDraft={...DEFAULT_THRESHOLDS};
     this.saveInsightThresholds();
   }
+  trackFinding(index:number, finding:Finding):string { return finding.id; }
   get insightResult():InsightResult {
     return evaluateInsights({platform:this.selectedPlatform,metrics:this.selectedMetrics,
       sourceState:this.freshness(this.bigQueryWindow,'BIGQUERY'),historical:!!this.rangeReport,
@@ -329,10 +330,6 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
 
   get primaryOverviewMetrics(): MetricDefinition[] {
     return this.overviewMetrics;
-  }
-
-  get secondaryOverviewMetrics(): MetricDefinition[] {
-    return this.isMobile ? this.overviewMetrics.slice(2) : [];
   }
 
   get overviewCoverage(): {label:string;rate:number|null}[] {
