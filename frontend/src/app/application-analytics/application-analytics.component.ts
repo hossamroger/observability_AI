@@ -35,6 +35,7 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
   historyLoading = false;
   historyError = '';
   historyLoaded = false;
+  historyRequestedAt = 0;
   private historySubscription?: Subscription;
 
   constructor(private readonly dashboard: DashboardService) {}
@@ -112,6 +113,7 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
     this.historyError = '';
     this.historyLoading = true;
     this.historyLoaded = true;
+    this.historyRequestedAt = Date.now();
     this.historySubscription = this.dashboard.loadApplicationHistory(this.selectedPlatform,this.historyMetric,this.historyPeriod).subscribe({
       next: rows => { this.historyRows = rows; this.historyLoading = false; },
       error: () => { this.historyError = 'Stored history unavailable.'; this.historyLoading = false; }
@@ -121,10 +123,10 @@ export class ApplicationAnalyticsComponent implements OnChanges, OnDestroy {
   get historyMax(): number { return Math.max(1,...this.historyRows.map(m => this.displayValue(m))); }
   get historyPoints(): {x:number;y:number;time:string;value:number}[] {
     if (!this.historyRows.length) return [];
-    const end = Math.max(...this.historyRows.map(m => Date.parse(m.windowEndUtc)));
+    const end = this.historyRequestedAt;
     const start = end - this.historyPeriod * 60000;
     const max = this.historyMax;
-    return this.historyRows.filter(m => Date.parse(m.windowEndUtc) >= start).map(m => ({
+    return this.historyRows.filter(m => Date.parse(m.windowEndUtc) >= start && Date.parse(m.windowEndUtc) <= end).map(m => ({
       x:44 + 700 * (Date.parse(m.windowEndUtc)-start)/(end-start),
       y:175 - 145 * this.displayValue(m)/max,
       time:m.windowEndUtc,value:this.displayValue(m)
