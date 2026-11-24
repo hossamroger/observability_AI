@@ -61,8 +61,22 @@
       BigQuery reports observed events from a separate, delayed window; counts may be incomplete.
       Payment and workflow event counts are not transaction success rates.
     </div>
+    <section class="service-panel" *ngIf="selectedPlatform === 'ANDROID' || selectedPlatform === 'IOS'">
+      <h2>Application journey performance</h2>
+      <p class="service-note" *ngIf="bigQueryWindow as window">BigQuery window: {{window.windowStartUtc | date:'medium'}} – {{window.windowEndUtc | date:'medium'}} · Collected {{window.collectedAtUtc | date:'medium'}}</p>
+      <p class="service-note">Eligible sessions with 5 minutes of observation: {{performanceMetric('session_start_eligible_sessions')?.metricValue ?? '—'}}</p>
+      <div class="table-scroll"><table class="service-table performance-table">
+        <thead><tr><th>Journey</th><th *ngFor="let col of durationColumns">{{col.label}}</th></tr></thead>
+        <tbody><tr *ngFor="let journey of durationRows"><td>{{journey.label}}</td>
+          <td *ngFor="let col of durationColumns"><ng-container *ngIf="performanceMetric(journey.key + '_' + col.key) as m; else noSample">{{m.metricValue | number:'1.0-2'}}</ng-container><ng-template #noSample>—</ng-template></td>
+        </tr></tbody>
+      </table></div>
+      <p class="service-note">GA4 event timestamp differences, not native cold-start or payment gateway timings. Session journeys use a 5-minute follow-up; approximate percentiles include matched observations only. Missing values are not zero.</p>
+      <p class="service-note" *ngIf="selectedPlatform === 'IOS'">Payment timing requires exactly one distinct initiation timestamp and one purchase timestamp for the same pseudonymous user and transaction within this window. Unmatched payments are not failures.</p>
+      <p class="service-note" *ngIf="selectedPlatform === 'ANDROID'">Payment duration unavailable: matching completion events and transaction IDs have not been established.</p>
+    </section>
     <section class="cards">
-      <article class="metric-card" *ngFor="let metric of (selectedPlatform === 'BACKEND' ? backendOtherMetrics : selectedMetrics)">
+      <article class="metric-card" *ngFor="let metric of (selectedPlatform === 'BACKEND' ? backendOtherMetrics : activityMetrics)">
         <div class="source">{{metric.sourceSystem}} · {{metric.serviceName}}</div>
         <div class="metric-value">{{metric.metricValue | number:'1.0-2'}} <span>{{metric.metricUnit}}</span></div>
         <div class="metric-name">{{metric.metricName.replaceAll('_', ' ')}}</div>
