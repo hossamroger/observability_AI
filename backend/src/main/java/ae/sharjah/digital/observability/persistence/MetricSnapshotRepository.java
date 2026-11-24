@@ -70,6 +70,21 @@ public class MetricSnapshotRepository {
                 demo ? 1 : 0, serviceId, "% [" + serviceId + "]", Timestamp.from(start), Timestamp.from(end));
     }
 
+    public List<MetricObservation> findApplicationHistory(String platform, String metric, java.time.Instant start, java.time.Instant end, boolean demo) {
+        String sql = "SELECT * FROM (SELECT s.*, ROW_NUMBER() OVER (PARTITION BY WINDOW_START_UTC, WINDOW_END_UTC "
+                + "ORDER BY COLLECTED_AT_UTC DESC, METRIC_ID DESC) AS OBS_RANK FROM OBS_METRIC_SNAPSHOT s "
+                + "WHERE SOURCE_SYSTEM = 'BIGQUERY' AND SERVICE_NAME = 'GA4_INTRADAY' AND PLATFORM = ? AND METRIC_NAME = ? "
+                + "AND IS_DEMO = ? AND WINDOW_END_UTC > ? AND WINDOW_END_UTC <= ?) "
+                + "WHERE OBS_RANK = 1 ORDER BY WINDOW_END_UTC FETCH FIRST 2000 ROWS ONLY";
+        return jdbc.query(sql, (result, row) -> new MetricObservation(
+                result.getString("METRIC_ID"), result.getString("SOURCE_SYSTEM"), result.getString("PLATFORM"),
+                result.getString("SERVICE_NAME"), result.getString("METRIC_NAME"),
+                result.getDouble("METRIC_VALUE"), result.getString("METRIC_UNIT"),
+                result.getTimestamp("WINDOW_START_UTC").toInstant(), result.getTimestamp("WINDOW_END_UTC").toInstant(),
+                result.getTimestamp("COLLECTED_AT_UTC").toInstant(), result.getInt("IS_DEMO") == 1),
+                platform, metric, demo ? 1 : 0, Timestamp.from(start), Timestamp.from(end));
+    }
+
     public List<MetricObservation> findLatest(int maximumRows) {
         int limit = Math.min(Math.max(maximumRows, 1), 500);
         // Portable SQL for Oracle 19c and H2: FETCH FIRST is supported by both.
