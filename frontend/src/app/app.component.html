@@ -56,7 +56,7 @@
         </svg>
       </section>
     </section>
-    <app-application-analytics *ngIf="selectedPlatform !== 'BACKEND'" [selectedPlatform]="selectedPlatform" [selectedMetrics]="selectedMetrics" [loading]="loading"></app-application-analytics>
+    <app-application-analytics *ngIf="selectedPlatform !== 'BACKEND'" [selectedPlatform]="selectedPlatform" [selectedMetrics]="selectedMetrics" [sourceOutcomes]="overview?.sourceOutcomes ?? []" [loading]="loading"></app-application-analytics>
     <section class="cards" *ngIf="selectedPlatform === 'BACKEND'">
       <article class="metric-card" *ngFor="let metric of backendOtherMetrics">
         <div class="source">{{metric.sourceSystem}} · {{metric.serviceName}}</div>

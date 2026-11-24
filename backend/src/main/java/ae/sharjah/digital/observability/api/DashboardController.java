@@ -19,13 +19,16 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class DashboardController {
     private final MetricSnapshotRepository snapshots;
     private final LiveUpdatePublisher updates;
+    private final ae.sharjah.digital.observability.persistence.CollectionExecutionLogRepository executionLogs;
     private final boolean demoMode;
 
     public DashboardController(MetricSnapshotRepository snapshots,
             LiveUpdatePublisher updates,
+            ae.sharjah.digital.observability.persistence.CollectionExecutionLogRepository executionLogs,
             @Value("${monitoring.demo.enabled:false}") boolean demoMode) {
         this.snapshots = snapshots;
         this.updates = updates;
+        this.executionLogs = executionLogs;
         this.demoMode = demoMode;
     }
 
@@ -57,6 +60,7 @@ public class DashboardController {
         response.put("dataMode", demoMode ? "DEMO" : "LIVE");
         response.put("generatedAtUtc", Instant.now().toString());
         response.put("metrics", metrics);
+        response.put("sourceOutcomes", demoMode ? java.util.Collections.emptyList() : executionLogs.findLatestSourceOutcomes());
         return response;
     }
 

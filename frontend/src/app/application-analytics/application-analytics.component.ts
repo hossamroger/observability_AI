@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, Input } from '@angular/core';
-import { MetricObservation, Platform } from '../metric.model';
+import { MetricObservation, Platform, SourceOutcome } from '../metric.model';
 
 interface MetricDefinition {
   key: string;
@@ -20,6 +20,8 @@ export class ApplicationAnalyticsComponent {
   @Input() selectedPlatform: Platform = 'WEB';
   @Input() selectedMetrics: MetricObservation[] = [];
   @Input() loading = false;
+  @Input() sourceOutcomes: SourceOutcome[] = [];
+  outcome(source: string): SourceOutcome | undefined { return this.sourceOutcomes.find(o => o.sourceSystem === source); }
 
   get isMobile(): boolean { return this.selectedPlatform === 'ANDROID' || this.selectedPlatform === 'IOS'; }
   get realtimeWindow(): MetricObservation | undefined { return this.findMetric('GA4','active_users_last_30m') ?? this.selectedMetrics.find(m => m.sourceSystem === 'GA4'); }
@@ -63,6 +65,10 @@ export class ApplicationAnalyticsComponent {
   }
 
   freshness(metric: MetricObservation | undefined, source: 'GA4' | 'BIGQUERY'): string {
+    const outcome = this.outcome(source);
+    if (outcome && outcome.status !== 'SUCCESS') {
+      return outcome.status === 'FAILED' ? 'Collection failed' : outcome.status === 'EMPTY' ? 'No observations returned' : 'Partial collection';
+    }
     if (!metric) return 'No data';
     const age = Date.now() - Date.parse(metric.collectedAtUtc);
     if (!Number.isFinite(age)) return 'Unknown';
