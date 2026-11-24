@@ -3,19 +3,19 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   font-size: 14px;
   color: #172a40;
-  background: #f3f5f8;
-  --canvas: #f3f5f8;
+  background: #f6f8fb;
+  --canvas: #f6f8fb;
   --surface: #ffffff;
   --muted-surface: #f7f9fb;
   --ink: #172a40;
   --muted: #596b80;
   --border: #dbe2ea;
-  --accent: #1859a5;
+  --accent: #163e80;
   --accent-soft: #eaf2fc;
   --success: #17664a;
   --danger: #b42318;
   --warning: #92600e;
-  --radius: 8px;
+  --radius: 10px;
   --space: 16px;
 }
 * { box-sizing: border-box; }
