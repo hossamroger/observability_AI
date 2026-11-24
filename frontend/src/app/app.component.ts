@@ -212,19 +212,43 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   readonly durationColumns = [
-    {key:'samples',label:'Samples'}, {key:'average_ms',label:'Average (ms)'}, {key:'p50_ms',label:'P50 (ms)'}, {key:'p95_ms',label:'P95 (ms)'}, {key:'p99_ms',label:'P99 (ms)'}
+    {key:'samples',label:'Samples'}, {key:'average_ms',label:'Average (s)'}, {key:'p50_ms',label:'P50 (s)'}, {key:'p95_ms',label:'P95 (s)'}, {key:'p99_ms',label:'P99 (s)'}
   ];
   get durationRows(): {key:string;label:string}[] {
     const rows = [{key:'session_to_first_screen',label:'Session start → First screen'}, {key:'session_to_home',label:'Session start → Home screen'}];
     if (this.selectedPlatform === 'IOS') rows.push({key:'payment_to_purchase',label:'Payment initiated → Purchase'});
     return rows;
   }
-  get bigQueryWindow(): MetricObservation | undefined { return this.selectedMetrics.find(m => m.sourceSystem === 'BIGQUERY'); }
+  get bigQueryWindow(): MetricObservation | undefined { return this.selectedMetrics.find(m => m.sourceSystem === 'BIGQUERY' && m.serviceName === 'GA4_INTRADAY'); }
   performanceMetric(name: string): MetricObservation | undefined {
-    return this.selectedMetrics.find(m => m.sourceSystem === 'BIGQUERY' && m.metricName === name);
+    return this.selectedMetrics.find(m => m.sourceSystem === 'BIGQUERY' && m.serviceName === 'GA4_INTRADAY' && m.metricName === name);
   }
   get activityMetrics(): MetricObservation[] {
-    return this.selectedMetrics.filter(m => m.sourceSystem !== 'BIGQUERY' || !/^(session_to_|payment_to_|session_start_eligible_sessions$)/.test(m.metricName));
+    return this.selectedMetrics.filter(m => m.sourceSystem !== 'BIGQUERY' || (m.serviceName === 'GA4_INTRADAY' && !/^(session_to_|payment_to_|session_start_eligible_sessions$)/.test(m.metricName)));
+  }
+
+  readonly slowThresholds = [5,10,30,60];
+  readonly sessionStages = [{key:'session_to_first_screen',label:'First screen observed'},{key:'session_to_home',label:'Home screen observed'}];
+  get eligibleSessions(): number | undefined { return this.performanceMetric('session_start_eligible_sessions')?.metricValue; }
+  percent(numerator: number | undefined, denominator: number | undefined): number | null {
+    return numerator != null && denominator != null && denominator > 0 && numerator <= denominator ? 100 * numerator / denominator : null;
+  }
+  notObserved(samples: number | undefined): number | null {
+    const total = this.eligibleSessions;
+    return samples != null && total != null && samples <= total ? total - samples : null;
+  }
+  displayValue(metric: MetricObservation): number { return metric.metricUnit === 'ms' ? metric.metricValue / 1000 : metric.metricValue; }
+  get versionRows(): {version:string;metrics:Record<string,number>}[] {
+    const groups = new Map<string,Record<string,number>>();
+    for (const m of this.selectedMetrics) {
+      if (m.sourceSystem !== 'BIGQUERY' || !m.serviceName.startsWith('APP_VERSION:')) continue;
+      const version = m.serviceName.slice('APP_VERSION:'.length);
+      const values = groups.get(version) ?? {};
+      values[m.metricName] = this.displayValue(m);
+      groups.set(version, values);
+    }
+    return Array.from(groups.entries()).map(([version,metrics]) => ({version,metrics}))
+      .sort((a,b) => (b.metrics['session_start_eligible_sessions'] ?? 0) - (a.metrics['session_start_eligible_sessions'] ?? 0) || a.version.localeCompare(b.version));
   }
 
   get lastUpdated(): string {
