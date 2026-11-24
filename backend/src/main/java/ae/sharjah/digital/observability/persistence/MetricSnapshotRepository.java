@@ -24,7 +24,11 @@ public class MetricSnapshotRepository {
                     Timestamp.from(observation.windowEndUtc), Timestamp.from(observation.collectedAtUtc),
                     observation.demo ? 1 : 0);
         } catch (DuplicateKeyException overlappingSnapshot) {
-            // A repeated source data point is not a new event; do not inflate counts.
+            // Late source corrections replace the same observation, never add another count.
+            jdbc.update("UPDATE OBS_METRIC_SNAPSHOT SET METRIC_VALUE = ?, METRIC_UNIT = ?, COLLECTED_AT_UTC = ? "
+                    + "WHERE METRIC_ID = ? AND COLLECTED_AT_UTC < ?",
+                    observation.metricValue, observation.metricUnit, Timestamp.from(observation.collectedAtUtc),
+                    observation.id, Timestamp.from(observation.collectedAtUtc));
         }
     }
 
