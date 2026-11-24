@@ -28,3 +28,11 @@ export interface DashboardOverview {
   metrics: MetricObservation[];
   sourceOutcomes?: SourceOutcome[];
 }
+
+export interface ApplicationRange {
+  windowStartUtc: string;
+  windowEndUtc: string;
+  generatedAtUtc: string;
+  partial: boolean;
+  metrics: MetricObservation[];
+}
