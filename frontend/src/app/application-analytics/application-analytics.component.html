@@ -83,6 +83,19 @@
   <p class="service-note">Event counts are not unique transactions or success rates.</p>
 </section>
 <details class="service-panel technical">
+  <summary>Data quality &amp; coverage</summary>
+  <p class="service-note">BigQuery checks describe observed telemetry only. Missing identifiers can exclude events from session or payment correlation; they do not establish a failed user journey.</p>
+  <div class="table-scroll"><table class="service-table">
+    <thead><tr><th>Check</th><th>Observed count</th><th>Share of applicable events</th></tr></thead>
+    <tbody><tr *ngFor="let check of qualityChecks">
+      <td>{{check.label}}</td><td [class.negative]="(qualityValue(check.key) ?? 0) > 0">{{qualityValue(check.key) ?? '—'}}</td>
+      <td><ng-container *ngIf="check.denominator as denominator">{{(percent(qualityValue(check.key),qualityValue(denominator)) | number:'1.0-2') ?? '—'}}<ng-container *ngIf="percent(qualityValue(check.key),qualityValue(denominator)) !== null">%</ng-container></ng-container><ng-container *ngIf="!check.denominator">—</ng-container></td>
+    </tr></tbody>
+  </table></div>
+  <p class="service-note">GA4 active users are not equivalent to BigQuery distinct pseudonymous identifiers. Windows, processing delay and environment filtering differ. No equality test is applied across sources.</p>
+  <p class="service-note">The latest source-wide window is shown. If a platform has no observations in that window, older platform values are not substituted. A missing value is not zero.</p>
+</details>
+<details class="service-panel technical">
   <summary>Technical metrics <small>({{technicalMetrics.length}} additional observations)</small></summary>
   <p class="service-note">Secondary counts are retained for diagnostics. Observed users are pseudonymous identifiers, unlike GA4 active users; session start events are not distinct sessions.</p>
   <div class="table-scroll"><table class="service-table">

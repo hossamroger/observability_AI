@@ -59,9 +59,21 @@ export class ApplicationAnalyticsComponent {
     return metrics;
   }
 
+  get qualityChecks(): {label:string;key:string;denominator?:string}[] {
+    const checks: {label:string;key:string;denominator?:string}[] = [
+      {label:'Events missing user or session ID',key:'quality_missing_session_key_events',denominator:'observed_events'},
+      {label:'Session starts missing user or session ID',key:'quality_missing_start_key_events',denominator:'session_start_events'}
+    ];
+    if (this.selectedPlatform === 'IOS') checks.push({label:'Initiation / purchase events missing correlation ID',key:'quality_missing_payment_key_events'});
+    if (this.selectedPlatform === 'WEB') checks.push({label:'Workflow events with unclassified result',key:'quality_unclassified_workflow_events'});
+    return checks;
+  }
+
+  qualityValue(key: string): number | undefined { return this.performanceMetric(key)?.metricValue; }
+
   get technicalMetrics(): MetricObservation[] {
     const shown = new Set([...this.overviewMetrics,...this.operationMetrics].map(m => m.source+'|'+m.key));
-    return this.activityMetrics.filter(m => !shown.has(m.sourceSystem+'|'+m.metricName));
+    return this.activityMetrics.filter(m => !shown.has(m.sourceSystem+'|'+m.metricName) && !(m.sourceSystem === 'BIGQUERY' && m.metricName.startsWith('quality_')));
   }
 
   freshness(metric: MetricObservation | undefined, source: 'GA4' | 'BIGQUERY'): string {

@@ -208,11 +208,17 @@ export class AppComponent implements OnInit, OnDestroy {
 
   get selectedMetrics(): MetricObservation[] {
     const data = this.overview?.metrics ?? [];
-    const latestBigQuery = Math.max(...data.filter(m => m.platform === this.selectedPlatform && m.sourceSystem === 'BIGQUERY').map(m => Date.parse(m.windowEndUtc)));
+    // Use the latest source-wide window, not a different historical window for each platform.
+    const latestWindows = new Map<string, number>();
+    for (const m of data) {
+      if (m.sourceSystem !== 'BIGQUERY' && m.sourceSystem !== 'GA4') continue;
+      const end = Date.parse(m.windowEndUtc);
+      if (Number.isFinite(end)) latestWindows.set(m.sourceSystem, Math.max(end, latestWindows.get(m.sourceSystem) ?? -Infinity));
+    }
     const seen = new Set<string>();
     return data.filter(metric => {
       if (metric.platform !== this.selectedPlatform) return false;
-      if (metric.sourceSystem === 'BIGQUERY' && Date.parse(metric.windowEndUtc) !== latestBigQuery) return false;
+      if (latestWindows.has(metric.sourceSystem) && Date.parse(metric.windowEndUtc) !== latestWindows.get(metric.sourceSystem)) return false;
       const key = `${metric.sourceSystem}|${metric.serviceName}|${metric.metricName}`;
       if (seen.has(key)) return false;
       seen.add(key);

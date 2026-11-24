@@ -148,9 +148,12 @@ public class BigQueryGa4Connector implements MonitoringConnector {
                         BigQueryPerformanceSql.metricUnit(metric),
                         start, end, false));
             }
+            BigQueryAggregateValidator.validate(observations);
+            java.util.Set<String> reportedPlatforms = new java.util.HashSet<>();
+            for (MetricObservation observation : observations) reportedPlatforms.add(observation.platform);
             LOG.info("event=bigquery_ga4_aggregated observations={} bytes_processed={} window_start={} window_end={}",
                     observations.size(), root.path("totalBytesProcessed").asText("unknown"), start, end);
-            return new CollectionBatch(sourceName(), observations);
+            return new CollectionBatch(sourceName(), observations, !observations.isEmpty() && reportedPlatforms.size() < 3);
         } catch (Exception failure) {
             throw new IllegalStateException("BigQuery GA4 collection failed", failure);
         }
@@ -196,6 +199,10 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             + "a AS (SELECT platform, COUNT(*) events, COUNT(DISTINCT user_pseudo_id) observed_users, "
             + "COUNT(DISTINCT IF(user_pseudo_id IS NOT NULL AND session_id IS NOT NULL, CONCAT(user_pseudo_id,':',CAST(session_id AS STRING)),NULL)) observed_sessions, "
             + "COUNTIF(event_name='session_start') session_starts, COUNTIF(event_name='screen_view') screen_views, "
+            + "COUNTIF(user_pseudo_id IS NULL OR session_id IS NULL) missing_session_key, "
+            + "COUNTIF(event_name='session_start' AND (user_pseudo_id IS NULL OR session_id IS NULL)) missing_start_key, "
+            + "COUNTIF(event_name IN ('payment_initiated','purchase') AND (user_pseudo_id IS NULL OR transaction_id IS NULL)) missing_payment_key, "
+            + "COUNTIF(event_name IN ('application_action','application_initiate_action') AND (action_result IS NULL OR action_result NOT IN ('success','failed'))) unclassified_workflow, "
             + "COUNTIF(event_name='page_view') page_views, COUNTIF(event_name='service_card_click') service_clicks, "
             + "COUNTIF(event_name='payment_initiated') payment_initiations, COUNTIF(event_name='purchase') purchase_events, "
             + "COUNTIF(event_name IN ('payment_failed','payment_fail')) payment_failure_events, "
@@ -207,6 +214,8 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             + "SELECT platform, m.metric_name, CAST(m.metric_value AS FLOAT64) AS metric_value FROM a, UNNEST(["
             + "STRUCT('observed_events' AS metric_name, events AS metric_value), STRUCT('observed_users',observed_users), "
             + "STRUCT('observed_sessions',observed_sessions), STRUCT('session_start_events',session_starts), "
+            + "STRUCT('quality_missing_session_key_events',missing_session_key), STRUCT('quality_missing_start_key_events',missing_start_key), "
+            + "STRUCT('quality_missing_payment_key_events',missing_payment_key), STRUCT('quality_unclassified_workflow_events',unclassified_workflow), "
             + "STRUCT('screen_view_events',screen_views), STRUCT('page_view_events',page_views), STRUCT('service_click_events',service_clicks), "
             + "STRUCT('payment_initiated_events',payment_initiations), STRUCT('purchase_events',purchase_events), "
             + "STRUCT('payment_failure_events',payment_failure_events), STRUCT('workflow_success_events',workflow_success_events), "
@@ -215,7 +224,9 @@ public class BigQueryGa4Connector implements MonitoringConnector {
             + "WHERE m.metric_name IN ('observed_events','observed_users','observed_sessions','session_start_events') "
             + "OR (platform IN ('ANDROID','IOS') AND m.metric_name IN ('screen_view_events','service_click_events','payment_initiated_events')) "
             + "OR (platform='IOS' AND m.metric_name IN ('purchase_events','payment_failure_events')) "
-            + "OR (platform='WEB' AND (m.metric_name='page_view_events' OR STARTS_WITH(m.metric_name,'workflow_')))) "
+            + "OR m.metric_name IN ('quality_missing_session_key_events','quality_missing_start_key_events') "
+            + "OR (platform='IOS' AND m.metric_name='quality_missing_payment_key_events') "
+            + "OR (platform='WEB' AND (m.metric_name='page_view_events' OR m.metric_name='quality_unclassified_workflow_events' OR STARTS_WITH(m.metric_name,'workflow_')))) "
             + BigQueryPerformanceSql.appendMetrics();
     }
 }

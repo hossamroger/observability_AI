@@ -13,7 +13,7 @@ final class BigQueryPerformanceSql {
             + "IF(COUNT(DISTINCT IF(event_name='session_start' AND event_timestamp=started_at,app_version,NULL))=1, MAX(IF(event_name='session_start' AND event_timestamp=started_at,app_version,NULL)),NULL) AS session_version, "
             + "MIN(IF(event_name='screen_view' AND event_timestamp BETWEEN started_at AND started_at+300000000,event_timestamp,NULL)) AS first_screen_at, "
             + "MIN(IF(event_name='screen_view' AND screen_name=@home_screen AND event_timestamp BETWEEN started_at AND started_at+300000000,event_timestamp,NULL)) AS home_at "
-            + "FROM session_events WHERE started_at IS NOT NULL AND started_at <= UNIX_MICROS(@end)-300000000 "
+            + "FROM session_events WHERE started_at IS NOT NULL AND started_at < UNIX_MICROS(@end)-300000000 "
             + "GROUP BY platform,user_pseudo_id,session_id,started_at), "
             + "session_counts AS (SELECT platform,COUNT(*) AS eligible FROM session_journeys GROUP BY platform), "
             + "payment_attempts AS (SELECT user_pseudo_id,transaction_id, "
