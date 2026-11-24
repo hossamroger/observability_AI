@@ -48,11 +48,21 @@ export class AppComponent implements OnInit, OnDestroy {
     this.selectPlatform('BACKEND');
     this.clearServiceFilters();
     this.openService(id);
+    setTimeout(() => document.getElementById('service-history-panel')?.scrollIntoView({block:'start'}),0);
   }
+  private globalRowsCache:GlobalServiceRow[]=[];
+  private globalRowsInput?:MetricObservation[];
+  private globalRowsThresholdKey='';
   get globalServices():GlobalServiceRow[] {
-    return this.serviceRows.map(row=>({id:row.id,name:row.name,health:this.health(row),
-      requests:row.metrics.requests?.metricValue,failed:row.metrics.failed?.metricValue,
-      failure:row.metrics.failure?.metricValue,p95:row.metrics.p95?.metricValue}));
+    const key=[this.warningRate,this.criticalRate,this.minimumRequests,this.slowP95].join('|');
+    if(this.globalRowsInput!==this.windowMetrics || this.globalRowsThresholdKey!==key){
+      this.globalRowsInput=this.windowMetrics;
+      this.globalRowsThresholdKey=key;
+      this.globalRowsCache=this.serviceRows.map(row=>({id:row.id,name:row.name,health:this.health(row),
+        requests:row.metrics.requests?.metricValue,failed:row.metrics.failed?.metricValue,
+        failure:row.metrics.failure?.metricValue,p95:row.metrics.p95?.metricValue}));
+    }
+    return this.globalRowsCache;
   }
   readonly displayTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local time';
   platformTitle(platform: Platform): string {
@@ -247,6 +257,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.globalView=false;
     this.selectedPlatform = platform;
     if (fromGlobal || platform !== 'BACKEND') this.resetServiceWindow();
+    if (fromGlobal && platform === 'BACKEND') { this.windowMinutes=30; this.page=0; this.closeService(); }
     if (platform === 'BACKEND') this.refreshWindow();
   }
 
