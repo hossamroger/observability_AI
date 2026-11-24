@@ -7,7 +7,7 @@ spring:
       - "optional:file:./backend/config/credentials.yml"
       - "optional:file:${OBS_CREDENTIALS_FILE:./backend/config/credentials.yml}"
   datasource:
-    url: jdbc:h2:mem:observability;MODE=Oracle;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:file:${OBS_LOCAL_DB_PATH:${user.home}/.observability-platform/observability};MODE=Oracle
     driver-class-name: org.h2.Driver
     username: sa
     password: ''
