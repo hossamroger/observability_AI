@@ -221,7 +221,8 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   get lastUpdated(): string {
-    const values = this.selectedMetrics.map(metric => Date.parse(metric.collectedAtUtc));
+    const metrics = this.selectedPlatform === 'BACKEND' ? [...this.selectedMetrics, ...this.windowMetrics] : this.selectedMetrics;
+    const values = metrics.map(metric => Date.parse(metric.collectedAtUtc)).filter(Number.isFinite);
     return values.length ? new Date(Math.max(...values)).toLocaleString() : 'No data received';
   }
 

@@ -33,10 +33,16 @@ public class MetricSnapshotRepository {
     }
 
     public List<MetricObservation> findLatestPerMetric(boolean demo) {
+        return findLatestPerMetric(demo, true);
+    }
+
+    public List<MetricObservation> findLatestPerMetric(boolean demo, boolean includeServiceMetrics) {
         String sql = "SELECT * FROM (SELECT s.*, ROW_NUMBER() OVER (PARTITION BY "
                 + "SOURCE_SYSTEM, PLATFORM, SERVICE_NAME, METRIC_NAME ORDER BY WINDOW_END_UTC DESC, "
                 + "COLLECTED_AT_UTC DESC, METRIC_ID DESC) AS OBS_RANK FROM OBS_METRIC_SNAPSHOT s "
-                + "WHERE IS_DEMO = ? AND WINDOW_END_UTC >= ?) WHERE OBS_RANK = 1 "
+                + "WHERE IS_DEMO = ? AND WINDOW_END_UTC >= ? "
+                + (includeServiceMetrics ? "" : "AND SOURCE_SYSTEM <> 'DYNATRACE' ")
+                + ") WHERE OBS_RANK = 1 "
                 + "ORDER BY SOURCE_SYSTEM, PLATFORM, SERVICE_NAME, METRIC_NAME";
         return jdbc.query(sql, (result, row) -> new MetricObservation(
                 result.getString("METRIC_ID"), result.getString("SOURCE_SYSTEM"), result.getString("PLATFORM"),

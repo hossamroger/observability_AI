@@ -9,7 +9,7 @@ export class DashboardService {
   constructor(private readonly http: HttpClient) {}
 
   loadOverview(): Observable<DashboardOverview> {
-    return this.http.get<DashboardOverview>(`${this.apiPath}/overview`);
+    return this.http.get<DashboardOverview>(`${this.apiPath}/overview`, {params: {includeServiceMetrics: false}});
   }
 
   loadServiceWindow(minutes: number): Observable<import('./metric.model').MetricObservation[]> {
