@@ -33,7 +33,9 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
     private static final String SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
     private final RestTemplate http;
     private final ObjectMapper json;
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(Ga4RealtimeConnector.class);
     private final String propertyId;
+    private final long intervalMillis;
     private final GoogleCredentials credentials;
     private final Map<String, String> productionStreams;
 
@@ -42,10 +44,12 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
             @Value("${monitoring.ga4.credentials-path:}") String credentialsPath,
             @Value("${monitoring.ga4.streams.web:}") String webStream,
             @Value("${monitoring.ga4.streams.android:}") String androidStream,
-            @Value("${monitoring.ga4.streams.ios:}") String iosStream) throws IOException {
+            @Value("${monitoring.ga4.streams.ios:}") String iosStream,
+            @Value("${monitoring.ga4.interval-ms:60000}") long intervalMillis) throws IOException {
         this.http = http;
         this.json = json;
         this.propertyId = propertyId;
+        this.intervalMillis = Math.max(30000L, intervalMillis);
         Map<String, String> streams = new LinkedHashMap<>();
         registerStream(streams, "WEB", webStream);
         registerStream(streams, "ANDROID", androidStream);
@@ -76,6 +80,7 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
     }
 
     @Override public String sourceName() { return "GA4"; }
+    @Override public long minimumIntervalMillis() { return intervalMillis; }
 
     @Override public CollectionBatch collect() {
         try {
@@ -97,12 +102,14 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
                     .put("fieldName", "streamId").putObject("inListFilter")
                     .set("values", streamIds);
             payload.put("limit", 1000);
+            payload.put("returnPropertyQuota", true);
             String request = json.writeValueAsString(payload);
             String endpoint = "https://analyticsdata.googleapis.com/v1beta/properties/"
                     + propertyId + ":runRealtimeReport";
             String body = http.exchange(endpoint, HttpMethod.POST,
                     new HttpEntity<>(request, headers), String.class).getBody();
             JsonNode root = json.readTree(body);
+            logQuota(root.path("propertyQuota"));
             List<MetricObservation> results = new ArrayList<>();
             java.util.Set<String> reportedPlatforms = new java.util.HashSet<>();
             if (root.path("rowCount").asInt(0) > root.path("rows").size()) throw new IllegalStateException("Incomplete GA4 report");
@@ -128,6 +135,17 @@ public class Ga4RealtimeConnector implements MonitoringConnector {
                     + error.getClass().getSimpleName(), error);
         }
     }
+    private void logQuota(JsonNode quota) {
+        if (!quota.isObject()) return;
+        for (String bucket : new String[] {"tokensPerDay", "tokensPerHour", "tokensPerProjectPerHour", "concurrentRequests", "serverErrorsPerProjectPerHour"}) {
+            JsonNode status = quota.path(bucket);
+            if (status.path("consumed").isIntegralNumber() && status.path("remaining").isIntegralNumber()) {
+                LOG.info("event=ga4_realtime_quota bucket={} consumed={} remaining={}", bucket,
+                        status.path("consumed").asLong(), status.path("remaining").asLong());
+            }
+        }
+    }
+
     static double parseCount(JsonNode value) {
         if (value.isMissingNode() || value.isNull()) throw new IllegalArgumentException("Missing GA4 count");
         double count = Double.parseDouble(value.asText());
