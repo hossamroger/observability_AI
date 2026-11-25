@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ApplicationAnalyticsComponent } from './application-analytics/application-analytics.component';
+import { GlobalOverviewComponent, GlobalServiceRow } from './global-overview/global-overview.component';
+import { latestPlatformMetrics } from './latest-platform-metrics';
 import { DashboardService } from './dashboard.service';
 import { DashboardOverview, MetricObservation, Platform } from './metric.model';
 
@@ -14,13 +16,54 @@ interface ServiceRow {
 @Component({
   selector: 'ds-root',
   standalone: true,
-  imports: [CommonModule, ApplicationAnalyticsComponent],
+  imports: [CommonModule, ApplicationAnalyticsComponent, GlobalOverviewComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit, OnDestroy {
   readonly platforms: Platform[] = ['WEB', 'ANDROID', 'IOS', 'BACKEND'];
   selectedPlatform: Platform = 'WEB';
+  globalView = true;
+  darkMode = this.restoreTheme();
+  private lastGlobalWindowAttempt = 0;
+  private restoreTheme():boolean {
+    try { return localStorage.getItem('observability.theme') === 'dark'; } catch { return false; }
+  }
+  toggleTheme():void {
+    this.darkMode = !this.darkMode;
+    try { localStorage.setItem('observability.theme',this.darkMode?'dark':'light'); } catch { /* Session only */ }
+  }
+  openGlobal():void {
+    if (this.globalView) return;
+    this.globalView=true;
+    this.resetServiceWindow();
+    this.lastGlobalWindowAttempt=0;
+    this.refresh();
+  }
+  private resetServiceWindow():void {
+    this.windowRequest++; this.windowSubscription?.unsubscribe(); this.windowLoading=false;
+    this.windowMetrics=[]; this.windowError='';
+  }
+  openGlobalService(id:string):void {
+    this.selectPlatform('BACKEND');
+    this.clearServiceFilters();
+    this.openService(id);
+    setTimeout(() => document.getElementById('service-history-panel')?.scrollIntoView({block:'start'}),0);
+  }
+  private globalRowsCache:GlobalServiceRow[]=[];
+  private globalRowsInput?:MetricObservation[];
+  private globalRowsThresholdKey='';
+  get globalServices():GlobalServiceRow[] {
+    const key=[this.warningRate,this.criticalRate,this.minimumRequests,this.slowP95].join('|');
+    if(this.globalRowsInput!==this.windowMetrics || this.globalRowsThresholdKey!==key){
+      this.globalRowsInput=this.windowMetrics;
+      this.globalRowsThresholdKey=key;
+      this.globalRowsCache=this.serviceRows.map(row=>({id:row.id,name:row.name,health:this.health(row),
+        requests:row.metrics.requests?.metricValue,failed:row.metrics.failed?.metricValue,
+        failure:row.metrics.failure?.metricValue,p95:row.metrics.p95?.metricValue}));
+    }
+    return this.globalRowsCache;
+  }
   readonly displayTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local time';
   platformTitle(platform: Platform): string {
     return platform === 'BACKEND' ? 'Backend & infrastructure' : platform === 'WEB' ? 'Web' : platform === 'IOS' ? 'iOS' : 'Android';
@@ -45,11 +88,15 @@ export class AppComponent implements OnInit, OnDestroy {
     this.refreshWindow();
   }
   private refreshWindow(): void {
-    if (this.selectedPlatform !== 'BACKEND' || this.windowLoading) return;
+    if ((!this.globalView && this.selectedPlatform !== 'BACKEND') || this.windowLoading) return;
+    if(this.globalView) {
+      if(Date.now()-this.lastGlobalWindowAttempt<30000) return;
+      this.lastGlobalWindowAttempt=Date.now();
+    }
     const request = ++this.windowRequest;
     this.windowSubscription?.unsubscribe();
     this.windowLoading = true;
-    this.windowSubscription = this.dashboard.loadServiceWindow(this.windowMinutes).subscribe({
+    this.windowSubscription = this.dashboard.loadServiceWindow(this.globalView ? 30 : this.windowMinutes).subscribe({
       next: metrics => { if (request === this.windowRequest) { this.windowMetrics = metrics; this.windowError = ''; this.windowLoading = false; } },
       error: () => { if (request === this.windowRequest) { this.windowMetrics = []; this.windowError = 'Dynatrace reporting window unavailable'; this.windowLoading = false; } }
     });
@@ -206,34 +253,20 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   selectPlatform(platform: Platform): void {
+    const fromGlobal=this.globalView;
+    this.globalView=false;
     this.selectedPlatform = platform;
-    if (platform !== 'BACKEND') {
-      this.windowRequest++; this.windowSubscription?.unsubscribe(); this.windowLoading = false;
-    } else this.refreshWindow();
+    if (fromGlobal || platform !== 'BACKEND') this.resetServiceWindow();
+    if (fromGlobal && platform === 'BACKEND') { this.windowMinutes=30; this.page=0; this.closeService(); }
+    if (platform === 'BACKEND') this.refreshWindow();
   }
 
   get selectedMetrics(): MetricObservation[] {
-    const data = this.overview?.metrics ?? [];
-    // Use the latest source-wide window, not a different historical window for each platform.
-    const latestWindows = new Map<string, number>();
-    for (const m of data) {
-      if (m.sourceSystem !== 'BIGQUERY' && m.sourceSystem !== 'GA4') continue;
-      const end = Date.parse(m.windowEndUtc);
-      if (Number.isFinite(end)) latestWindows.set(m.sourceSystem, Math.max(end, latestWindows.get(m.sourceSystem) ?? -Infinity));
-    }
-    const seen = new Set<string>();
-    return data.filter(metric => {
-      if (metric.platform !== this.selectedPlatform) return false;
-      if (latestWindows.has(metric.sourceSystem) && Date.parse(metric.windowEndUtc) !== latestWindows.get(metric.sourceSystem)) return false;
-      const key = `${metric.sourceSystem}|${metric.serviceName}|${metric.metricName}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    return latestPlatformMetrics(this.overview?.metrics ?? [], this.selectedPlatform);
   }
 
   get lastUpdated(): string {
-    const metrics = this.selectedPlatform === 'BACKEND' ? [...this.selectedMetrics, ...this.windowMetrics] : this.selectedMetrics;
+    const metrics = this.globalView ? [...(this.overview?.metrics ?? []),...this.windowMetrics] : this.selectedPlatform === 'BACKEND' ? [...this.selectedMetrics, ...this.windowMetrics] : this.selectedMetrics;
     const values = metrics.map(metric => Date.parse(metric.collectedAtUtc)).filter(Number.isFinite);
     return values.length ? new Date(Math.max(...values)).toLocaleString() : 'No data received';
   }
