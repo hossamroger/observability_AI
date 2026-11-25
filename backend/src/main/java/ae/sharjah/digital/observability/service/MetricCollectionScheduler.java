@@ -41,8 +41,13 @@ public class MetricCollectionScheduler {
             if (!schedule.tryAcquire(System.nanoTime())) return;
             try {
                 executor.execute(() -> {
-                    try { collection.collectSource(connector); }
-                    finally { schedule.complete(System.nanoTime()); }
+                    long retryAfterMillis = -1L;
+                    try { retryAfterMillis = collection.collectSource(connector); }
+                    finally {
+                        long delayMillis = schedule.complete(System.nanoTime(), retryAfterMillis);
+                        if (retryAfterMillis >= 0) LOG.warn("event=collection_rate_limit_backoff source={} next_attempt_delay_ms={} retry_after_ms={}",
+                                connector.sourceName(), delayMillis, retryAfterMillis);
+                    }
                 });
             } catch (RuntimeException rejected) {
                 schedule.complete(System.nanoTime());
@@ -57,19 +62,30 @@ public class MetricCollectionScheduler {
         private boolean running;
         private boolean attempted;
         private long completedAt;
+        private long nextDelayNanos;
+        private int consecutiveRateLimits;
 
         SourceSchedule(long delayMillis) { this.delayNanos = TimeUnit.MILLISECONDS.toNanos(delayMillis); }
 
         synchronized boolean tryAcquire(long now) {
-            if (running || (attempted && now - completedAt < delayNanos)) return false;
+            if (running || (attempted && now - completedAt < nextDelayNanos)) return false;
             running = true;
             return true;
         }
 
-        synchronized void complete(long now) {
+        synchronized void complete(long now) { complete(now, -1L); }
+
+        synchronized long complete(long now, long retryAfterMillis) {
+            if (retryAfterMillis >= 0) consecutiveRateLimits = Math.min(6, consecutiveRateLimits + 1);
+            else consecutiveRateLimits = 0;
+            long backoffMillis = consecutiveRateLimits == 0 ? 0L
+                    : Math.min(3600000L, 120000L * (1L << (consecutiveRateLimits - 1)));
+            nextDelayNanos = Math.max(delayNanos,
+                    TimeUnit.MILLISECONDS.toNanos(Math.max(backoffMillis, retryAfterMillis)));
             completedAt = now;
             attempted = true;
             running = false;
+            return TimeUnit.NANOSECONDS.toMillis(nextDelayNanos);
         }
     }
 }
