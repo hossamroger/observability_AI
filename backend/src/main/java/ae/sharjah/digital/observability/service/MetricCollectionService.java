@@ -25,7 +25,8 @@ public class MetricCollectionService {
     }
 
     /** Failures are isolated by connector; errors are structured, and secrets are never logged. */
-    public void collectSource(MonitoringConnector connector) {
+    public long collectSource(MonitoringConnector connector) {
+        long retryAfterMillis = -1L; // Non-429 result; no rate-limit backoff.
         String executionId = UUID.randomUUID().toString();
         long started = System.nanoTime();
         try {
@@ -40,6 +41,7 @@ public class MetricCollectionService {
         } catch (Exception failure) {
             long elapsedMs = (System.nanoTime() - started) / 1_000_000;
             String errorType = sanitizedErrorCategory(failure);
+            retryAfterMillis = RateLimitRetry.afterMillis(failure, java.time.Instant.now());
             // Never persist exception.toString() or vendor response bodies: they can contain secrets.
             try {
                 executionLogs.record(executionId, connector.sourceName(), "FAILED", 0,
@@ -56,6 +58,7 @@ public class MetricCollectionService {
         // Notification is best effort and must not change the persisted collection outcome.
         try { updates.broadcastSourceChange(connector.sourceName()); }
         catch (RuntimeException notificationFailure) { LOG.warn("event=collection_notification_failed source={}", connector.sourceName()); }
+        return retryAfterMillis;
     }
     private String sanitizedErrorCategory(Throwable exception) {
         Throwable cause = exception;
