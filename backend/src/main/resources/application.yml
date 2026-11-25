@@ -25,6 +25,7 @@ monitoring:
     enabled: false
   ga4:
     enabled: false
+    interval-ms: 60000
     property-id: ${GA4_PROPERTY_ID:}
     credentials-path: ${GA4_CREDENTIALS_PATH:}
     streams:
